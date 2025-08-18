@@ -1,15 +1,404 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
-  output   = "../app/generated/prisma"
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model Category {
+  id           String        @id @default(cuid())
+  name         String        @unique
+  description  String?
+  products     Product[]
+  salesTargets SalesTarget[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@map("categories")
+}
+
+model Product {
+  id               String         @id @default(cuid())
+  name             String
+  description      String?
+  price            Float
+  wholesalePrice   Float?
+  stock            Int            @default(0)
+  minStock         Int            @default(5)  // minimum stock threshold
+  image            String?
+  barcode          String?        @unique
+  sku              String?        @unique      // stock keeping unit
+  category         Category       @relation(fields: [categoryId], references: [id])
+  categoryId       String
+  unit             Unit?          @relation(fields: [unitId], references: [id])
+  unitId           String?
+  orderItems       OrderItem[]
+  isActive         Boolean        @default(true)
+  // Dashboard Analytics Relations
+  dailyStats       DailyStats[]
+  weeklyStats      WeeklyStats[]
+  monthlyStats     MonthlyStats[]
+  productStats     ProductStats[]
+  customerStats    CustomerStats[]
+  salesTargets     SalesTarget[]
+  inventoryAlerts  InventoryAlert[]
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@map("products")
+}
+
+model Customer {
+  id            String         @id @default(cuid())
+  name          String
+  email         String?        @unique
+  phone         String?
+  address       String?
+  orders        Order[]
+  customerStats CustomerStats?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@map("customers")
+}
+
+model Order {
+  id              String        @id @default(cuid())
+  orderNumber     String        @unique
+  customer        Customer?     @relation(fields: [customerId], references: [id])
+  customerId      String?
+  cashier         User          @relation(fields: [cashierId], references: [id])
+  cashierId       String
+  items           OrderItem[]
+  subtotal        Float
+  tax             Float
+  discount        Float         @default(0)
+  total           Float
+  paymentMethod   PaymentMethod
+  paymentStatus   PaymentStatus @default(PENDING)
+  status          OrderStatus   @default(PENDING)
+  notes           String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@map("orders")
+}
+
+model OrderItem {
+  id        String  @id @default(cuid())
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId   String
+  product   Product @relation(fields: [productId], references: [id])
+  productId String
+  quantity  Int
+  price     Float   // Price at time of order
+  subtotal  Float
+
+  @@map("order_items")
+}
+
+model User {
+  id                   String                @id @default(cuid())
+  username             String                @unique
+  email                String                @unique
+  password             String
+  firstName            String
+  lastName             String
+  role                 UserRole              @default(CASHIER)
+  isActive             Boolean               @default(true)
+  orders               Order[]
+  shifts               Shift[]
+  cashierPerformance   CashierPerformance[]
+  salesTargets         SalesTarget[]
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+
+  @@map("users")
+}
+
+model Shift {
+  id              String         @id @default(cuid())
+  cashier         User           @relation(fields: [cashierId], references: [id])
+  cashierId       String
+  startTime       DateTime       @default(now())
+  endTime         DateTime?
+  startBalance    Float          @default(0)
+  finalBalance    Float?
+  totalSales      Float          @default(0)
+  isActive        Boolean        @default(true)
+  notes           String?
+  dailyStats      DailyStats[]
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@map("shifts")
+}
+
+// Dashboard Analytics Models
+model DailyStats {
+  id                    String   @id @default(cuid())
+  date                  DateTime @unique
+  shift                 Shift?   @relation(fields: [shiftId], references: [id])
+  shiftId               String?
+  totalTransactions     Int      @default(0)
+  totalSales            Float    @default(0)
+  totalProfit           Float    @default(0)
+  totalCustomers        Int      @default(0)
+  totalItemsSold        Int      @default(0)
+  averageOrderValue     Float    @default(0)
+  cashSales             Float    @default(0)
+  cardSales             Float    @default(0)
+  mobilePaymentSales    Float    @default(0)
+  topSellingProductId   String?
+  topSellingProduct     Product? @relation(fields: [topSellingProductId], references: [id])
+  topSellingProductQty  Int      @default(0)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@map("daily_stats")
+}
+
+model WeeklyStats {
+  id                    String   @id @default(cuid())
+  weekStart             DateTime @unique
+  weekEnd               DateTime
+  totalTransactions     Int      @default(0)
+  totalSales            Float    @default(0)
+  totalProfit           Float    @default(0)
+  totalCustomers        Int      @default(0)
+  totalItemsSold        Int      @default(0)
+  averageOrderValue     Float    @default(0)
+  bestSalesDay          DateTime?
+  bestSalesDayAmount    Float    @default(0)
+  topSellingProductId   String?
+  topSellingProduct     Product? @relation(fields: [topSellingProductId], references: [id])
+  topSellingProductQty  Int      @default(0)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@map("weekly_stats")
+}
+
+model MonthlyStats {
+  id                    String   @id @default(cuid())
+  month                 Int      // 1-12
+  year                  Int
+  totalTransactions     Int      @default(0)
+  totalSales            Float    @default(0)
+  totalProfit           Float    @default(0)
+  totalCustomers        Int      @default(0)
+  totalItemsSold        Int      @default(0)
+  averageOrderValue     Float    @default(0)
+  bestSalesDay          DateTime?
+  bestSalesDayAmount    Float    @default(0)
+  topSellingProductId   String?
+  topSellingProduct     Product? @relation(fields: [topSellingProductId], references: [id])
+  topSellingProductQty  Int      @default(0)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@unique([month, year])
+  @@map("monthly_stats")
+}
+
+model ProductStats {
+  id              String   @id @default(cuid())
+  product         Product  @relation(fields: [productId], references: [id])
+  productId       String
+  date            DateTime
+  quantitySold    Int      @default(0)
+  revenue         Float    @default(0)
+  profit          Float    @default(0)
+  averagePrice    Float    @default(0)
+  stockAtStart    Int      @default(0)
+  stockAtEnd      Int      @default(0)
+  reorderAlert    Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([productId, date])
+  @@map("product_stats")
+}
+
+model CustomerStats {
+  id                  String   @id @default(cuid())
+  customer            Customer @relation(fields: [customerId], references: [id])
+  customerId          String
+  totalOrders         Int      @default(0)
+  totalSpent          Float    @default(0)
+  averageOrderValue   Float    @default(0)
+  lastOrderDate       DateTime?
+  firstOrderDate      DateTime?
+  favoriteProductId   String?
+  favoriteProduct     Product? @relation(fields: [favoriteProductId], references: [id])
+  loyaltyPoints       Int      @default(0)
+  customerType        CustomerType @default(REGULAR)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@unique([customerId])
+  @@map("customer_stats")
+}
+
+model CashierPerformance {
+  id                    String   @id @default(cuid())
+  cashier               User     @relation(fields: [cashierId], references: [id])
+  cashierId             String
+  date                  DateTime
+  totalTransactions     Int      @default(0)
+  totalSales            Float    @default(0)
+  averageTransactionTime Float   @default(0) // in seconds
+  customerSatisfaction  Float?   // 1-5 rating
+  errorsCount           Int      @default(0)
+  hoursWorked           Float    @default(0)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@unique([cashierId, date])
+  @@map("cashier_performance")
+}
+
+model SalesTarget {
+  id                String          @id @default(cuid())
+  targetType        TargetType
+  targetPeriod      TargetPeriod
+  targetValue       Float
+  currentValue      Float           @default(0)
+  startDate         DateTime
+  endDate           DateTime
+  isActive          Boolean         @default(true)
+  description       String?
+  cashierId         String?
+  cashier           User?           @relation(fields: [cashierId], references: [id])
+  productId         String?
+  product           Product?        @relation(fields: [productId], references: [id])
+  categoryId        String?
+  category          Category?       @relation(fields: [categoryId], references: [id])
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@map("sales_targets")
+}
+
+model InventoryAlert {
+  id              String      @id @default(cuid())
+  product         Product     @relation(fields: [productId], references: [id])
+  productId       String
+  alertType       AlertType
+  threshold       Int
+  currentStock    Int
+  isResolved      Boolean     @default(false)
+  resolvedAt      DateTime?
+  priority        AlertPriority @default(MEDIUM)
+  message         String
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@map("inventory_alerts")
+}
+
+model Setting {
+  id    String @id @default(cuid())
+  key   String @unique
+  value String
+
+  @@map("settings")
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  MOBILE_PAYMENT
+  CHECK
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum OrderStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  CANCELLED
+  REFUNDED
+}
+
+enum UserRole {
+  ADMIN
+  MANAGER
+  CASHIER
+}
+
+enum CustomerType {
+  REGULAR
+  VIP
+  WHOLESALE
+  MEMBER
+}
+
+enum TargetType {
+  SALES_REVENUE
+  TRANSACTION_COUNT
+  PRODUCT_QUANTITY
+  CUSTOMER_COUNT
+  PROFIT_MARGIN
+}
+
+model Unit {
+  id          String   @id @default(cuid())
+  name        String   @unique  // nama unit seperti "Kilogram", "Liter", dll
+  symbol      String   @unique  // simbol seperti "kg", "L", "pcs", dll
+  description String?  // deskripsi opsional
+  isActive    Boolean  @default(true) // status aktif/tidak aktif
+  // Relations
+  products    Product[] // products yang menggunakan unit ini
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("units")
+}
+
+model Supplier {
+  id         String   @id @default(cuid())
+  name       String
+  phone      String?
+  address    String?
+  storeName  String?  // nama toko/agen
+  isActive   Boolean  @default(true) // status (aktif/tidak aktif)
+  createdAt  DateTime @default(now()) // tgl ditambahkan
+  updatedAt  DateTime @updatedAt // terakhir diperbarui
+
+  @@map("suppliers")
+}
+
+enum TargetPeriod {
+  DAILY
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+  YEARLY
+}
+
+enum AlertType {
+  LOW_STOCK
+  OUT_OF_STOCK
+  OVERSTOCK
+  EXPIRED
+  NEAR_EXPIRY
+}
+
+enum AlertPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
 }

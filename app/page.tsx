@@ -2,10 +2,15 @@
 
 import { useState, useEffect } from "react"
 import { Header } from "@/components/pos/header"
+import { Sidebar } from "@/components/pos/sidebar"
 import { CategoryFilter } from "@/components/pos/category-filter"
 import { ProductGrid } from "@/components/pos/product-grid"
 import { CartSummary } from "@/components/pos/cart-summary"
 import { CheckoutDialog } from "@/components/pos/checkout-dialog"
+import { ReceiptDialog } from "@/components/pos/receipt-dialog"
+import { EndShiftDialog } from "@/components/pos/end-shift-dialog"
+import { ProtectedRoute } from "@/components/auth/protected-route"
+import { useAuth } from "@/contexts/auth-context"
 import { Toaster } from "@/components/ui/sonner"
 import { toast } from "sonner"
 
@@ -13,49 +18,151 @@ interface Product {
   id: string
   name: string
   price: number
-  category: string
+  wholesalePrice?: number | null
+  category: {
+    id: string
+    name: string
+  }
   stock: number
-  image?: string
+  image?: string | null
 }
 
 interface CartItem {
   id: string
   name: string
   price: number
+  wholesalePrice?: number | null
   quantity: number
   subtotal: number
+  isWholesale: boolean
 }
 
-const mockProducts: Product[] = [
-  { id: "1", name: "Coffee - Espresso", price: 3.50, category: "Beverages", stock: 50 },
-  { id: "2", name: "Coffee - Americano", price: 4.00, category: "Beverages", stock: 45 },
-  { id: "3", name: "Sandwich - Club", price: 8.95, category: "Food", stock: 20 },
-  { id: "4", name: "Croissant", price: 3.25, category: "Food", stock: 15 },
-  { id: "5", name: "Muffin - Blueberry", price: 2.75, category: "Food", stock: 30 },
-  { id: "6", name: "Tea - Green", price: 2.50, category: "Beverages", stock: 40 },
-  { id: "7", name: "Juice - Orange", price: 4.50, category: "Beverages", stock: 25 },
-  { id: "8", name: "Bagel with Cream Cheese", price: 4.25, category: "Food", stock: 18 },
-  { id: "9", name: "Smoothie - Berry", price: 6.00, category: "Beverages", stock: 22 },
-  { id: "10", name: "Salad - Caesar", price: 9.50, category: "Food", stock: 12 },
-  { id: "11", name: "Cookie - Chocolate Chip", price: 2.00, category: "Snacks", stock: 35 },
-  { id: "12", name: "Chips - BBQ", price: 1.75, category: "Snacks", stock: 60 }
-]
-
 export default function POSApp() {
-  const [products] = useState<Product[]>(mockProducts)
+  const { user, logout } = useAuth()
+  const [products, setProducts] = useState<Product[]>([])
+  const [categories, setCategories] = useState<string[]>([])
   const [cart, setCart] = useState<CartItem[]>([])
-  const [filteredProducts, setFilteredProducts] = useState<Product[]>(products)
+  const [filteredProducts, setFilteredProducts] = useState<Product[]>([])
   const [selectedCategory, setSelectedCategory] = useState("all")
   const [searchTerm, setSearchTerm] = useState("")
   const [currentTime, setCurrentTime] = useState("")
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false)
+  const [isReceiptOpen, setIsReceiptOpen] = useState(false)
+  const [receiptData, setReceiptData] = useState<{
+    orderNumber: string
+    items: CartItem[]
+    total: number
+    tax: number
+    grandTotal: number
+    paymentMethod: 'cash' | 'card'
+    cashReceived?: number
+    changeAmount?: number
+    cashierName: string
+    timestamp: string
+  } | null>(null)
+  const [lastOrder, setLastOrder] = useState<{
+    orderNumber: string
+    items: CartItem[]
+    total: number
+    tax: number
+    grandTotal: number
+    paymentMethod: 'cash' | 'card'
+    cashReceived?: number
+    changeAmount?: number
+    timestamp: string
+  } | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [isEndShiftOpen, setIsEndShiftOpen] = useState(false)
+  const [currentShift, setCurrentShift] = useState<{
+    id: string
+    startTime: string
+    startBalance: number
+    finalBalance?: number
+    totalSales: number
+  } | null>(null)
 
-  const categories = Array.from(new Set(products.map(p => p.category)))
+  // Function to create a new shift
+  const createNewShift = async () => {
+    try {
+      const response = await fetch('/api/shifts', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          startBalance: 1000000 // Default start balance of Rp 1,000,000
+        }),
+      })
+
+      if (response.ok) {
+        const newShift = await response.json()
+        setCurrentShift(newShift)
+      }
+    } catch (error) {
+      console.error('Error creating new shift:', error)
+      toast.error("Gagal membuat shift baru")
+    }
+  }
+
+  // Fetch products, categories, and shift data from database
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [productsRes, categoriesRes, shiftRes] = await Promise.all([
+          fetch('/api/products'),
+          fetch('/api/categories'),
+          fetch('/api/shifts')
+        ])
+
+        if (productsRes.ok && categoriesRes.ok) {
+          const productsData = await productsRes.json()
+          const categoriesData = await categoriesRes.json()
+          
+          setProducts(productsData)
+          setCategories(categoriesData.map((cat: any) => cat.name))
+          setFilteredProducts(productsData)
+        }
+
+        // Handle shift data
+        if (shiftRes.ok) {
+          const shiftData = await shiftRes.json()
+          if (shiftData) {
+            setCurrentShift(shiftData)
+          } else {
+            // No active shift, create one with default start balance
+            await createNewShift()
+          }
+        } else {
+          // Create new shift if no active shift found
+          await createNewShift()
+        }
+      } catch (error) {
+        console.error('Error fetching data:', error)
+        toast.error("Gagal memuat data")
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    if (user) {
+      fetchData()
+    }
+  }, [user])
 
   // Update time every second
   useEffect(() => {
     const updateTime = () => {
-      setCurrentTime(new Date().toLocaleTimeString())
+      const now = new Date()
+      setCurrentTime(now.toLocaleString('id-ID', {
+        weekday: 'short',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      }))
     }
     updateTime()
     const interval = setInterval(updateTime, 1000)
@@ -67,13 +174,13 @@ export default function POSApp() {
     let filtered = products
 
     if (selectedCategory !== "all") {
-      filtered = filtered.filter(p => p.category === selectedCategory)
+      filtered = filtered.filter(p => p.category.name === selectedCategory)
     }
 
     if (searchTerm) {
       filtered = filtered.filter(p => 
         p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.category.toLowerCase().includes(searchTerm.toLowerCase())
+        p.category.name.toLowerCase().includes(searchTerm.toLowerCase())
       )
     }
 
@@ -82,7 +189,7 @@ export default function POSApp() {
 
   const addToCart = (product: Product) => {
     if (product.stock === 0) {
-      toast.error("Product is out of stock")
+      toast.error("Produk tidak tersedia")
       return
     }
 
@@ -91,9 +198,17 @@ export default function POSApp() {
       
       if (existingItem) {
         const newQuantity = existingItem.quantity + 1
+        if (newQuantity > product.stock) {
+          toast.error("Stok tidak mencukupi")
+          return prevCart
+        }
         return prevCart.map(item =>
           item.id === product.id
-            ? { ...item, quantity: newQuantity, subtotal: newQuantity * item.price }
+            ? { 
+                ...item, 
+                quantity: newQuantity, 
+                subtotal: newQuantity * (item.isWholesale ? (item.wholesalePrice || item.price) : item.price)
+              }
             : item
         )
       } else {
@@ -101,13 +216,15 @@ export default function POSApp() {
           id: product.id,
           name: product.name,
           price: product.price,
+          wholesalePrice: product.wholesalePrice,
           quantity: 1,
-          subtotal: product.price
+          subtotal: product.price,
+          isWholesale: false
         }]
       }
     })
     
-    toast.success(`${product.name} added to cart`)
+    toast.success(`${product.name} ditambahkan ke keranjang`)
   }
 
   const updateQuantity = (id: string, quantity: number) => {
@@ -116,10 +233,20 @@ export default function POSApp() {
       return
     }
 
+    const product = products.find(p => p.id === id)
+    if (product && quantity > product.stock) {
+      toast.error("Stok tidak mencukupi")
+      return
+    }
+
     setCart(prevCart =>
       prevCart.map(item =>
         item.id === id
-          ? { ...item, quantity, subtotal: quantity * item.price }
+          ? { 
+              ...item, 
+              quantity, 
+              subtotal: quantity * (item.isWholesale ? (item.wholesalePrice || item.price) : item.price)
+            }
           : item
       )
     )
@@ -127,7 +254,24 @@ export default function POSApp() {
 
   const removeFromCart = (id: string) => {
     setCart(prevCart => prevCart.filter(item => item.id !== id))
-    toast.success("Item removed from cart")
+    toast.success("Item dihapus dari keranjang")
+  }
+
+  const toggleWholesale = (id: string) => {
+    setCart(prevCart =>
+      prevCart.map(item => {
+        if (item.id === id && item.wholesalePrice) {
+          const newIsWholesale = !item.isWholesale
+          const newPrice = newIsWholesale ? item.wholesalePrice : item.price
+          return {
+            ...item,
+            isWholesale: newIsWholesale,
+            subtotal: item.quantity * newPrice
+          }
+        }
+        return item
+      })
+    )
   }
 
   const calculateTotals = () => {
@@ -141,82 +285,241 @@ export default function POSApp() {
 
   const handleCheckout = () => {
     if (cart.length === 0) {
-      toast.error("Cart is empty")
+      toast.error("Keranjang kosong")
       return
     }
     setIsCheckoutOpen(true)
   }
 
-  const handlePayment = (method: 'cash' | 'card') => {
-    // Here you would integrate with payment processing
-    setIsCheckoutOpen(false)
-    setCart([])
-    toast.success(`Payment successful via ${method}! Receipt printed.`)
+  const handlePayment = async (method: 'cash' | 'card', cashReceived?: number) => {
+    try {
+      if (!user) {
+        toast.error("Informasi pengguna tidak tersedia")
+        return
+      }
+
+      // Create order in database
+      const orderData = {
+        items: cart,
+        cashierId: user.id,
+        paymentMethod: method.toUpperCase(),
+        notes: `Pembayaran via ${method === 'cash' ? 'tunai' : 'kartu'}`
+      }
+
+      const response = await fetch('/api/orders', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(orderData),
+      })
+
+      if (response.ok) {
+        const order = await response.json()
+        
+        // Prepare receipt data
+        const receiptData = {
+          orderNumber: order.orderNumber,
+          items: cart,
+          total,
+          tax,
+          grandTotal,
+          paymentMethod: method,
+          cashReceived: cashReceived || grandTotal,
+          changeAmount: cashReceived ? Math.max(0, cashReceived - grandTotal) : 0,
+          cashierName: `${user.firstName} ${user.lastName}`,
+          timestamp: new Date().toISOString()
+        }
+        
+        setIsCheckoutOpen(false)
+        setCart([])
+        
+        // Update local product stock
+        setProducts(prevProducts =>
+          prevProducts.map(product => {
+            const cartItem = cart.find(item => item.id === product.id)
+            if (cartItem) {
+              return {
+                ...product,
+                stock: product.stock - cartItem.quantity
+              }
+            }
+            return product
+          })
+        )
+        
+        // Update sales tracking for all payments (cash and card)
+        updateShiftSales(grandTotal)
+        
+        // Show receipt dialog
+        setReceiptData(receiptData)
+        setIsReceiptOpen(true)
+        
+        toast.success(`Pembayaran berhasil via ${method === 'cash' ? 'tunai' : 'kartu'}! Pesanan #${order.orderNumber} dibuat.`)
+      } else {
+        toast.error("Gagal memproses pembayaran")
+      }
+    } catch (error) {
+      console.error('Error processing payment:', error)
+      toast.error("Gagal memproses pembayaran")
+    }
   }
 
   const handleSettings = () => {
-    toast.info("Settings panel would open here")
+    toast.info("Panel pengaturan akan terbuka di sini")
   }
 
   const handleReports = () => {
-    toast.info("Sales reports would open here")
+    toast.info("Laporan penjualan akan terbuka di sini")
   }
 
-  const handleLogout = () => {
-    toast.info("Logout functionality would be implemented here")
+  const handleLogout = async () => {
+    setIsEndShiftOpen(true)
+  }
+
+  const handleConfirmEndShift = async () => {
+    try {
+      if (!currentShift) return
+
+      const finalBalance = currentShift.startBalance + currentShift.totalSales
+      
+      // End the shift in the database
+      const response = await fetch('/api/shifts', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          totalSales: currentShift.totalSales,
+          finalBalance: finalBalance,
+          notes: "Shift ended by cashier"
+        }),
+      })
+
+      if (response.ok) {
+        setIsEndShiftOpen(false)
+        await logout()
+        toast.success("Shift berakhir - Berhasil keluar")
+      } else {
+        toast.error("Gagal mengakhiri shift")
+      }
+    } catch (error) {
+      toast.error("Gagal mengakhiri shift")
+    }
+  }
+
+  const handleCancelEndShift = () => {
+    setIsEndShiftOpen(false)
+  }
+
+  // Update shift sales when a payment is made
+  const updateShiftSales = (amount: number) => {
+    if (currentShift) {
+      setCurrentShift(prev => prev ? {
+        ...prev,
+        totalSales: prev.totalSales + amount
+      } : null)
+    }
   }
 
   return (
-    <div className="h-screen flex flex-col bg-gray-50">
-      <Header
-        storeName="My Store POS"
-        cashierName="John Doe"
-        currentTime={currentTime}
-        onOpenSettings={handleSettings}
-        onOpenReports={handleReports}
-        onLogout={handleLogout}
-      />
-
-      <div className="flex-1 flex overflow-hidden">
-        {/* Products Section */}
-        <div className="flex-1 flex flex-col">
-          <CategoryFilter
-            categories={categories}
-            selectedCategory={selectedCategory}
-            onCategoryChange={setSelectedCategory}
-            searchTerm={searchTerm}
-            onSearchChange={setSearchTerm}
-          />
-          <div className="flex-1 overflow-y-auto">
-            <ProductGrid
-              products={filteredProducts}
-              onAddToCart={addToCart}
-            />
+    <ProtectedRoute>
+      {loading ? (
+        <div className="h-screen flex items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p>Memuat Sistem POS...</p>
           </div>
         </div>
+      ) : (
+        <div className="h-screen flex flex-col bg-gray-50">
+          <Header
+            storeName="Toko Saya POS"
+            cashierName={user ? `${user.firstName} ${user.lastName}` : "Memuat..."}
+            userRole={user?.role}
+            currentTime={currentTime}
+            onOpenSettings={handleSettings}
+            onOpenReports={handleReports}
+            onLogout={handleLogout}
+            onOpenSidebar={() => setIsSidebarOpen(true)}
+          />
 
-        {/* Cart Section */}
-        <div className="w-80 border-l bg-white">
-          <CartSummary
+          <div className="flex-1 flex overflow-hidden">
+            {/* Products Section */}
+            <div className="flex-1 flex flex-col">
+              <CategoryFilter
+                categories={categories}
+                selectedCategory={selectedCategory}
+                onCategoryChange={setSelectedCategory}
+                searchTerm={searchTerm}
+                onSearchChange={setSearchTerm}
+              />
+              <div className="flex-1 overflow-y-auto">
+                <ProductGrid
+                  products={filteredProducts}
+                  onAddToCart={addToCart}
+                />
+              </div>
+            </div>
+
+            {/* Cart Section */}
+            <div className="w-80 border-l bg-white flex flex-col h-full">
+              <CartSummary
+                items={cart}
+                onUpdateQuantity={updateQuantity}
+                onRemoveItem={removeFromCart}
+                onToggleWholesale={toggleWholesale}
+                onCheckout={handleCheckout}
+              />
+            </div>
+          </div>
+
+          <CheckoutDialog
+            isOpen={isCheckoutOpen}
+            onClose={() => setIsCheckoutOpen(false)}
             items={cart}
-            onUpdateQuantity={updateQuantity}
-            onRemoveItem={removeFromCart}
-            onCheckout={handleCheckout}
+            total={total}
+            tax={tax}
+            grandTotal={grandTotal}
+            onPaymentMethod={handlePayment}
+          />
+
+          {receiptData && (
+            <ReceiptDialog
+              isOpen={isReceiptOpen}
+              onClose={() => setIsReceiptOpen(false)}
+              orderNumber={receiptData.orderNumber}
+              items={receiptData.items}
+              total={receiptData.total}
+              tax={receiptData.tax}
+              grandTotal={receiptData.grandTotal}
+              paymentMethod={receiptData.paymentMethod}
+              cashReceived={receiptData.cashReceived}
+              changeAmount={receiptData.changeAmount}
+              cashierName={receiptData.cashierName}
+              timestamp={receiptData.timestamp}
+            />
+          )}
+
+          <EndShiftDialog
+            isOpen={isEndShiftOpen}
+            onClose={handleCancelEndShift}
+            onConfirm={handleConfirmEndShift}
+            userName={user ? `${user.firstName} ${user.lastName}` : ""}
+            startBalance={currentShift?.startBalance || 0}
+            finalBalance={(currentShift?.startBalance || 0) + (currentShift?.totalSales || 0)}
+            startTime={currentShift?.startTime || new Date().toISOString()}
+            totalSales={currentShift?.totalSales || 0}
+          />
+
+          <Sidebar
+            isOpen={isSidebarOpen}
+            onClose={() => setIsSidebarOpen(false)}
+            mode="overlay"
           />
         </div>
-      </div>
-
-      <CheckoutDialog
-        isOpen={isCheckoutOpen}
-        onClose={() => setIsCheckoutOpen(false)}
-        items={cart}
-        total={total}
-        tax={tax}
-        grandTotal={grandTotal}
-        onPaymentMethod={handlePayment}
-      />
-
+      )}
       <Toaster />
-    </div>
+    </ProtectedRoute>
   )
 }

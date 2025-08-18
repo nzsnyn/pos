@@ -25,7 +25,7 @@ export function CategoryFilter({
       <div className="flex-1 relative">
         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
         <Input
-          placeholder="Search products..."
+          placeholder="Cari produk..."
           value={searchTerm}
           onChange={(e) => onSearchChange(e.target.value)}
           className="pl-10"
@@ -35,10 +35,10 @@ export function CategoryFilter({
         <Select value={selectedCategory} onValueChange={onCategoryChange}>
           <SelectTrigger className="w-[180px]">
             <Filter className="w-4 h-4 mr-2" />
-            <SelectValue placeholder="All Categories" />
+            <SelectValue placeholder="Semua Kategori" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All Categories</SelectItem>
+            <SelectItem value="all">Semua Kategori</SelectItem>
             {categories.map((category) => (
               <SelectItem key={category} value={category}>
                 {category}
@@ -53,7 +53,7 @@ export function CategoryFilter({
             onCategoryChange("all")
           }}
         >
-          Clear
+          Hapus
         </Button>
       </div>
     </div>

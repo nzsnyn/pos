@@ -120,3 +120,52 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Print-specific styles for receipts */
+@media print {
+  .print-receipt {
+    width: 100% !important;
+    max-width: 100% !important;
+    font-size: 12px !important;
+    line-height: 1.2 !important;
+    color: black !important;
+    background: white !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+  
+  .print-receipt * {
+    color: black !important;
+    background: white !important;
+  }
+  
+  .print-receipt > div {
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 10mm !important;
+    margin: 0 !important;
+  }
+  
+  .print-hide {
+    display: none !important;
+  }
+  
+  /* Hide everything except the print receipt when printing */
+  body * {
+    visibility: hidden;
+  }
+  
+  .print-receipt, .print-receipt * {
+    visibility: visible;
+  }
+  
+  @page {
+    size: A4;
+    margin: 0;
+  }
+  
+  body {
+    margin: 0;
+    padding: 0;
+  }
+}
