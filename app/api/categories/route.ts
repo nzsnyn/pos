@@ -40,6 +40,17 @@ export async function POST(request: NextRequest) {
         name,
         description,
       },
+      include: {
+        _count: {
+          select: {
+            products: {
+              where: {
+                isActive: true,
+              },
+            },
+          },
+        },
+      },
     })
 
     return NextResponse.json(category, { status: 201 })

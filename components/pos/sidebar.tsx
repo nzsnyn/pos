@@ -68,6 +68,11 @@ export function Sidebar({ isOpen, onClose, mode = 'overlay' }: SidebarProps) {
           href: "/products"
         },
         {
+          icon: Package,
+          label: "Kategori",
+          href: "/categories"
+        },
+        {
           icon: Scale,
           label: "Unit Satuan",
           href: "/units"
