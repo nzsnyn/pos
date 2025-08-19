@@ -33,7 +33,15 @@ import {
 interface ProcurementItem {
   id: string
   productId: string
-  productName: string
+  product: {
+    id: string
+    name: string
+    price: number
+    category?: {
+      id: string
+      name: string
+    }
+  }
   quantity: number
   unitPrice: number
   totalPrice: number
@@ -42,8 +50,13 @@ interface ProcurementItem {
 interface Procurement {
   id: string
   procurementNumber: string
+  supplier?: {
+    id: string
+    name: string
+    phone?: string
+    address?: string
+  }
   supplierId?: string
-  supplierName?: string
   totalItems: number
   totalAmount: number
   status: 'DRAFT' | 'ORDERED' | 'RECEIVED' | 'CANCELLED'
@@ -51,9 +64,38 @@ interface Procurement {
   receivedDate?: string
   notes?: string
   items: ProcurementItem[]
-  createdBy: string
+  createdBy: {
+    id: string
+    firstName: string
+    lastName: string
+  }
   createdAt: string
   updatedAt: string
+}
+
+interface Product {
+  id: string
+  name: string
+  price: number
+  category: {
+    id: string
+    name: string
+  }
+}
+
+interface Supplier {
+  id: string
+  name: string
+  phone?: string
+  address?: string
+}
+
+interface FormItem {
+  productId: string
+  productName: string
+  quantity: string
+  unitPrice: string
+  totalPrice: number
 }
 
 const statusLabels = {
@@ -77,11 +119,21 @@ export default function ProcurementPage() {
   const [procurements, setProcurements] = useState<Procurement[]>([])
   const [filteredProcurements, setFilteredProcurements] = useState<Procurement[]>([])
   const [loading, setLoading] = useState(true)
+  const [submitting, setSubmitting] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState<string>("all")
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false)
   const [selectedProcurement, setSelectedProcurement] = useState<Procurement | null>(null)
+  
+  // Form states
+  const [products, setProducts] = useState<Product[]>([])
+  const [suppliers, setSuppliers] = useState<Supplier[]>([])
+  const [selectedSupplier, setSelectedSupplier] = useState("")
+  const [notes, setNotes] = useState("")
+  const [formItems, setFormItems] = useState<FormItem[]>([
+    { productId: "", productName: "", quantity: "1", unitPrice: "", totalPrice: 0 }
+  ])
 
   // Update time every second
   useEffect(() => {
@@ -102,118 +154,46 @@ export default function ProcurementPage() {
     return () => clearInterval(interval)
   }, [])
 
-  // Mock data for procurement
+  // Fetch data
   useEffect(() => {
-    const mockProcurements: Procurement[] = [
-      {
-        id: "1",
-        procurementNumber: "PO-2025-001",
-        supplierId: "sup1",
-        supplierName: "PT. Maju Jaya",
-        totalItems: 3,
-        totalAmount: 1500000,
-        status: 'RECEIVED',
-        orderDate: "2025-08-15T08:00:00.000Z",
-        receivedDate: "2025-08-17T10:30:00.000Z",
-        notes: "Pengadaan rutin mingguan",
-        items: [
-          {
-            id: "1",
-            productId: "prod1",
-            productName: "Indomie Goreng",
-            quantity: 100,
-            unitPrice: 3500,
-            totalPrice: 350000
-          },
-          {
-            id: "2", 
-            productId: "prod2",
-            productName: "Teh Botol Sosro",
-            quantity: 50,
-            unitPrice: 4500,
-            totalPrice: 225000
-          },
-          {
-            id: "3",
-            productId: "prod3",
-            productName: "Beras Premium 5kg",
-            quantity: 20,
-            unitPrice: 46250,
-            totalPrice: 925000
-          }
-        ],
-        createdBy: "Admin",
-        createdAt: "2025-08-15T08:00:00.000Z",
-        updatedAt: "2025-08-17T10:30:00.000Z"
-      },
-      {
-        id: "2",
-        procurementNumber: "PO-2025-002",
-        supplierId: "sup2",
-        supplierName: "CV. Berkah Selalu",
-        totalItems: 2,
-        totalAmount: 750000,
-        status: 'ORDERED',
-        orderDate: "2025-08-16T09:15:00.000Z",
-        notes: "Pengadaan produk cleaning",
-        items: [
-          {
-            id: "4",
-            productId: "prod4",
-            productName: "Deterjen Rinso",
-            quantity: 30,
-            unitPrice: 12500,
-            totalPrice: 375000
-          },
-          {
-            id: "5",
-            productId: "prod5",
-            productName: "Sabun Cuci Piring",
-            quantity: 25,
-            unitPrice: 15000,
-            totalPrice: 375000
-          }
-        ],
-        createdBy: "Admin",
-        createdAt: "2025-08-16T09:15:00.000Z",
-        updatedAt: "2025-08-16T09:15:00.000Z"
-      },
-      {
-        id: "3",
-        procurementNumber: "PO-2025-003",
-        totalItems: 1,
-        totalAmount: 500000,
-        status: 'DRAFT',
-        orderDate: "2025-08-18T14:00:00.000Z",
-        notes: "Draft pengadaan snack",
-        items: [
-          {
-            id: "6",
-            productId: "prod6", 
-            productName: "Chitato Mix",
-            quantity: 50,
-            unitPrice: 10000,
-            totalPrice: 500000
-          }
-        ],
-        createdBy: "Admin",
-        createdAt: "2025-08-18T14:00:00.000Z",
-        updatedAt: "2025-08-18T14:00:00.000Z"
-      }
-    ]
-
-    setTimeout(() => {
-      setProcurements(mockProcurements)
-      setFilteredProcurements(mockProcurements)
-      setLoading(false)
-    }, 1000)
+    fetchData()
   }, [])
+
+  const fetchData = async () => {
+    setLoading(true)
+    try {
+      const [procurementsRes, productsRes, suppliersRes] = await Promise.all([
+        fetch('/api/procurement'),
+        fetch('/api/products'),
+        fetch('/api/suppliers')
+      ])
+
+      if (!procurementsRes.ok) throw new Error('Gagal memuat data pengadaan')
+      if (!productsRes.ok) throw new Error('Gagal memuat data produk')
+      if (!suppliersRes.ok) throw new Error('Gagal memuat data supplier')
+
+      const [procurementsData, productsData, suppliersData] = await Promise.all([
+        procurementsRes.json(),
+        productsRes.json(),
+        suppliersRes.json()
+      ])
+
+      setProcurements(procurementsData)
+      setProducts(productsData)
+      setSuppliers(suppliersData)
+      setFilteredProcurements(procurementsData)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Terjadi kesalahan saat memuat data")
+    } finally {
+      setLoading(false)
+    }
+  }
 
   // Filter procurements
   useEffect(() => {
     let filtered = procurements.filter(procurement =>
       procurement.procurementNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      procurement.supplierName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      procurement.supplier?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       procurement.notes?.toLowerCase().includes(searchTerm.toLowerCase())
     )
 
@@ -223,6 +203,136 @@ export default function ProcurementPage() {
 
     setFilteredProcurements(filtered)
   }, [procurements, searchTerm, statusFilter])
+
+  const addFormItem = () => {
+    setFormItems([...formItems, { productId: "", productName: "", quantity: "1", unitPrice: "", totalPrice: 0 }])
+  }
+
+  const removeFormItem = (index: number) => {
+    if (formItems.length > 1) {
+      const newItems = formItems.filter((_, i) => i !== index)
+      setFormItems(newItems)
+    }
+  }
+
+  const updateFormItem = (index: number, field: keyof FormItem, value: string) => {
+    const newItems = [...formItems]
+    newItems[index] = { ...newItems[index], [field]: value }
+
+    // Update product name when productId changes
+    if (field === 'productId') {
+      const product = products.find(p => p.id === value)
+      if (product) {
+        newItems[index].productName = product.name
+        newItems[index].unitPrice = product.price.toString()
+      }
+    }
+
+    // Calculate total price
+    if (field === 'quantity' || field === 'unitPrice') {
+      const quantity = parseFloat(newItems[index].quantity) || 0
+      const unitPrice = parseFloat(newItems[index].unitPrice) || 0
+      newItems[index].totalPrice = quantity * unitPrice
+    }
+
+    setFormItems(newItems)
+  }
+
+  const resetForm = () => {
+    setSelectedSupplier("")
+    setNotes("")
+    setFormItems([{ productId: "", productName: "", quantity: "1", unitPrice: "", totalPrice: 0 }])
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+
+    if (!selectedSupplier) {
+      toast.error("Pilih supplier terlebih dahulu")
+      return
+    }
+
+    if (formItems.every(item => !item.productId)) {
+      toast.error("Pilih minimal satu produk")
+      return
+    }
+
+    const validItems = formItems.filter(item => item.productId && item.quantity && item.unitPrice)
+    if (validItems.length === 0) {
+      toast.error("Lengkapi data item pengadaan")
+      return
+    }
+
+    setSubmitting(true)
+    try {
+      const response = await fetch('/api/procurement', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          supplierId: selectedSupplier || null,
+          items: validItems.map(item => ({
+            productId: item.productId,
+            quantity: parseInt(item.quantity),
+            unitPrice: parseFloat(item.unitPrice)
+          })),
+          notes: notes || null,
+          createdById: user?.id
+        }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Terjadi kesalahan')
+      }
+
+      toast.success("Pengadaan berhasil dibuat")
+      setIsAddDialogOpen(false)
+      resetForm()
+      await fetchData()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Terjadi kesalahan")
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleStatusUpdate = async (procurementId: string, newStatus: string) => {
+    setSubmitting(true)
+    try {
+      // Find the current procurement to preserve its supplier
+      const currentProcurement = procurements?.find(p => p.id === procurementId)
+      
+      const updateData: any = { 
+        status: newStatus,
+        supplierId: currentProcurement?.supplierId // Preserve the current supplier
+      }
+      if (newStatus === 'RECEIVED') {
+        updateData.receivedDate = new Date().toISOString()
+      }
+
+      const response = await fetch(`/api/procurement/${procurementId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updateData),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Gagal mengubah status')
+      }
+
+      toast.success("Status pengadaan berhasil diperbarui")
+      await fetchData()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Terjadi kesalahan")
+    } finally {
+      setSubmitting(false)
+    }
+  }
 
   const handleSettings = () => {
     console.log("Settings clicked")
@@ -462,10 +572,10 @@ export default function ProcurementPage() {
                                   )}
                                 </td>
                                 <td className="p-4">
-                                  {procurement.supplierName ? (
+                                  {procurement.supplier ? (
                                     <div className="flex items-center gap-1">
                                       <User className="h-4 w-4 text-blue-500" />
-                                      <span>{procurement.supplierName}</span>
+                                      <span>{procurement.supplier.name}</span>
                                     </div>
                                   ) : (
                                     <span className="text-gray-400">Belum dipilih</span>
@@ -502,13 +612,35 @@ export default function ProcurementPage() {
                                     >
                                       <Eye className="h-3 w-3" />
                                     </Button>
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      disabled={procurement.status === 'RECEIVED'}
-                                    >
-                                      <Edit className="h-3 w-3" />
-                                    </Button>
+                                    {procurement.status === 'DRAFT' && (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => handleStatusUpdate(procurement.id, 'ORDERED')}
+                                        disabled={submitting}
+                                      >
+                                        Order
+                                      </Button>
+                                    )}
+                                    {procurement.status === 'ORDERED' && (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => handleStatusUpdate(procurement.id, 'RECEIVED')}
+                                        disabled={submitting}
+                                      >
+                                        Terima
+                                      </Button>
+                                    )}
+                                    {procurement.status !== 'RECEIVED' && (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        disabled={true}
+                                      >
+                                        <Edit className="h-3 w-3" />
+                                      </Button>
+                                    )}
                                   </div>
                                 </td>
                               </tr>
@@ -524,6 +656,155 @@ export default function ProcurementPage() {
           </div>
         </div>
 
+        {/* Add Procurement Dialog */}
+        <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+          <DialogContent className="min-w-6xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Buat Pengadaan Baru</DialogTitle>
+            </DialogHeader>
+            <form onSubmit={handleSubmit} className="space-y-6">
+              {/* Supplier Selection */}
+              <div>
+                <Label className="font-medium">Supplier *</Label>
+                <select
+                  className="w-full px-3 py-2 mt-1 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={selectedSupplier}
+                  onChange={(e) => setSelectedSupplier(e.target.value)}
+                  required
+                >
+                  <option value="">Pilih Supplier</option>
+                  {suppliers && suppliers.length > 0 ? suppliers.map((supplier) => (
+                    <option key={supplier.id} value={supplier.id}>
+                      {supplier.name}
+                    </option>
+                  )) : (
+                    <option disabled>Memuat suppliers...</option>
+                  )}
+                </select>
+              </div>
+
+              {/* Items */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <Label className="font-medium">Item Pengadaan</Label>
+                  <Button type="button" size="sm" onClick={addFormItem}>
+                    <Plus className="h-4 w-4 mr-1" />
+                    Tambah Item
+                  </Button>
+                </div>
+
+                <div className="space-y-4">
+                  {formItems.map((item, index) => (
+                    <div key={index} className="grid grid-cols-12 gap-4 p-4 border rounded-lg">
+                      <div className="col-span-4">
+                        <Label>Produk</Label>
+                        <select
+                          className="w-full px-3 py-2 mt-1 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          value={item.productId}
+                          onChange={(e) => updateFormItem(index, 'productId', e.target.value)}
+                          required
+                        >
+                          <option value="">Pilih Produk</option>
+                          {products && products.length > 0 ? products.map((product) => (
+                            <option key={product.id} value={product.id}>
+                              {product.name} - {formatCurrency(product.price)}
+                            </option>
+                          )) : (
+                            <option disabled>Memuat produk...</option>
+                          )}
+                        </select>
+                      </div>
+
+                      <div className="col-span-2">
+                        <Label>Qty</Label>
+                        <Input
+                          type="number"
+                          min="1"
+                          value={item.quantity}
+                          onChange={(e) => updateFormItem(index, 'quantity', e.target.value)}
+                          className="mt-1"
+                          required
+                        />
+                      </div>
+
+                      <div className="col-span-3">
+                        <Label>Harga Satuan</Label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          value={item.unitPrice}
+                          onChange={(e) => updateFormItem(index, 'unitPrice', e.target.value)}
+                          className="mt-1"
+                          required
+                        />
+                      </div>
+
+                      <div className="col-span-2">
+                        <Label>Total</Label>
+                        <div className="mt-1 px-3 py-2 bg-gray-50 border rounded-md text-sm font-medium">
+                          {formatCurrency(item.totalPrice)}
+                        </div>
+                      </div>
+
+                      <div className="col-span-1 flex items-end">
+                        {formItems.length > 1 && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => removeFormItem(index)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+                  <div className="flex justify-between items-center text-lg font-medium">
+                    <span>Total Keseluruhan:</span>
+                    <span className="text-green-600">
+                      {formatCurrency(formItems.reduce((sum, item) => sum + item.totalPrice, 0))}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Notes */}
+              <div>
+                <Label className="font-medium">Catatan</Label>
+                <Textarea
+                  placeholder="Catatan tambahan untuk pengadaan ini..."
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  className="mt-1"
+                  rows={3}
+                />
+              </div>
+
+              <div className="flex justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setIsAddDialogOpen(false)
+                    resetForm()
+                  }}
+                  disabled={submitting}
+                >
+                  Batal
+                </Button>
+                <Button type="submit" disabled={submitting}>
+                  {submitting && <RefreshCw className="mr-2 h-4 w-4 animate-spin" />}
+                  Simpan
+                </Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
+
         {/* Detail Dialog */}
         <Dialog open={isDetailDialogOpen} onOpenChange={setIsDetailDialogOpen}>
           <DialogContent className="max-w-4xl">
@@ -535,7 +816,7 @@ export default function ProcurementPage() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label className="font-medium">Supplier:</Label>
-                    <p className="text-sm text-gray-700">{selectedProcurement.supplierName || "Belum dipilih"}</p>
+                    <p className="text-sm text-gray-700">{selectedProcurement.supplier?.name || "Belum dipilih"}</p>
                   </div>
                   <div>
                     <Label className="font-medium">Status:</Label>
@@ -570,7 +851,7 @@ export default function ProcurementPage() {
                       <tbody>
                         {selectedProcurement.items.map((item) => (
                           <tr key={item.id} className="border-t">
-                            <td className="p-3">{item.productName}</td>
+                            <td className="p-3">{item.product.name}</td>
                             <td className="p-3">{item.quantity}</td>
                             <td className="p-3">{formatCurrency(item.unitPrice)}</td>
                             <td className="p-3 font-medium">{formatCurrency(item.totalPrice)}</td>

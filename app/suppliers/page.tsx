@@ -83,11 +83,12 @@ export default function SuppliersPage() {
   const fetchSuppliers = async () => {
     try {
       setLoading(true)
-      const response = await fetch('/api/suppliers')
+      const response = await fetch('/api/suppliers?page=1&limit=100') // Request paginated data for the suppliers page
       if (response.ok) {
         const data = await response.json()
-        setSuppliers(data.suppliers)
-        setFilteredSuppliers(data.suppliers)
+        const suppliersArray = data.suppliers || []
+        setSuppliers(suppliersArray)
+        setFilteredSuppliers(suppliersArray)
       } else {
         toast.error('Gagal memuat data supplier')
       }
@@ -105,6 +106,11 @@ export default function SuppliersPage() {
 
   // Filter suppliers
   useEffect(() => {
+    if (!suppliers || !Array.isArray(suppliers)) {
+      setFilteredSuppliers([])
+      return
+    }
+    
     let filtered = suppliers.filter(supplier =>
       supplier.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       supplier.storeName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -396,7 +402,7 @@ export default function SuppliersPage() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <Truck className="h-5 w-5" />
-                    Daftar Supplier ({filteredSuppliers.length})
+                    Daftar Supplier ({filteredSuppliers?.length || 0})
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -428,7 +434,7 @@ export default function SuppliersPage() {
                           </tr>
                         </thead>
                         <tbody>
-                          {filteredSuppliers.length === 0 ? (
+                          {(filteredSuppliers?.length || 0) === 0 ? (
                             <tr>
                               <td colSpan={7} className="text-center p-8 text-gray-500">
                                 <Truck className="h-12 w-12 mx-auto mb-4 opacity-50" />

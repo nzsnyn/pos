@@ -23,18 +23,19 @@ model Category {
 }
 
 model Product {
-  id               String         @id @default(cuid())
+  id               String            @id @default(cuid())
   name             String
   description      String?
   price            Float
   wholesalePrice   Float?
-  stock            Int            @default(0)
+  stock            Int               @default(0)
   image            String?
-  barcode          String?        @unique
-  category         Category       @relation(fields: [categoryId], references: [id])
+  barcode          String?           @unique
+  category         Category          @relation(fields: [categoryId], references: [id])
   categoryId       String
   orderItems       OrderItem[]
-  isActive         Boolean        @default(true)
+  procurementItems ProcurementItem[] // relation to procurement items
+  isActive         Boolean           @default(true)
   // Dashboard Analytics Relations
   dailyStats       DailyStats[]
   weeklyStats      WeeklyStats[]
@@ -43,8 +44,8 @@ model Product {
   customerStats    CustomerStats[]
   salesTargets     SalesTarget[]
   inventoryAlerts  InventoryAlert[]
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
 
   @@map("products")
 }
@@ -111,6 +112,7 @@ model User {
   shifts               Shift[]
   cashierPerformance   CashierPerformance[]
   salesTargets         SalesTarget[]
+  procurements         Procurement[]         // relation to procurements
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt
 
@@ -364,16 +366,59 @@ model Unit {
 }
 
 model Supplier {
-  id         String   @id @default(cuid())
+  id         String        @id @default(cuid())
   name       String
   phone      String?
   address    String?
-  storeName  String?  // nama toko/agen
-  isActive   Boolean  @default(true) // status (aktif/tidak aktif)
-  createdAt  DateTime @default(now()) // tgl ditambahkan
-  updatedAt  DateTime @updatedAt // terakhir diperbarui
+  storeName  String?       // nama toko/agen
+  isActive   Boolean       @default(true) // status (aktif/tidak aktif)
+  procurements Procurement[] // relation to procurements
+  createdAt  DateTime      @default(now()) // tgl ditambahkan
+  updatedAt  DateTime      @updatedAt // terakhir diperbarui
 
   @@map("suppliers")
+}
+
+enum ProcurementStatus {
+  DRAFT
+  ORDERED
+  RECEIVED
+  CANCELLED
+}
+
+model Procurement {
+  id                String              @id @default(cuid())
+  procurementNumber String              @unique
+  supplier          Supplier?           @relation(fields: [supplierId], references: [id])
+  supplierId        String?
+  items             ProcurementItem[]
+  totalItems        Int                 @default(0)
+  totalAmount       Float               @default(0)
+  status            ProcurementStatus   @default(DRAFT)
+  orderDate         DateTime            @default(now())
+  receivedDate      DateTime?
+  notes             String?
+  createdBy         User                @relation(fields: [createdById], references: [id])
+  createdById       String
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  @@map("procurements")
+}
+
+model ProcurementItem {
+  id            String      @id @default(cuid())
+  procurement   Procurement @relation(fields: [procurementId], references: [id], onDelete: Cascade)
+  procurementId String
+  product       Product     @relation(fields: [productId], references: [id])
+  productId     String
+  quantity      Int
+  unitPrice     Float
+  totalPrice    Float
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@map("procurement_items")
 }
 
 enum TargetPeriod {

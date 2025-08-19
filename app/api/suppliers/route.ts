@@ -7,12 +7,10 @@ const prisma = new PrismaClient()
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
-    const page = parseInt(searchParams.get('page') || '1')
-    const limit = parseInt(searchParams.get('limit') || '50')
+    const page = searchParams.get('page')
+    const limit = searchParams.get('limit')
     const search = searchParams.get('search') || ''
     const status = searchParams.get('status') || 'all'
-
-    const skip = (page - 1) * limit
 
     // Build where clause
     const where: any = {}
@@ -29,13 +27,26 @@ export async function GET(request: NextRequest) {
       where.isActive = status === 'active'
     }
 
-    // Get suppliers with pagination
+    // If no pagination params, return simple array (for forms)
+    if (!page && !limit) {
+      const suppliers = await prisma.supplier.findMany({
+        where,
+        orderBy: { name: 'asc' }
+      })
+      return NextResponse.json(suppliers)
+    }
+
+    // Otherwise return paginated response (for tables)
+    const pageNum = parseInt(page || '1')
+    const limitNum = parseInt(limit || '50')
+    const skip = (pageNum - 1) * limitNum
+
     const [suppliers, totalCount] = await Promise.all([
       prisma.supplier.findMany({
         where,
         orderBy: { createdAt: 'desc' },
         skip,
-        take: limit
+        take: limitNum
       }),
       prisma.supplier.count({ where })
     ])
@@ -43,10 +54,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       suppliers,
       pagination: {
-        page,
-        limit,
+        page: pageNum,
+        limit: limitNum,
         total: totalCount,
-        totalPages: Math.ceil(totalCount / limit)
+        totalPages: Math.ceil(totalCount / limitNum)
       }
     })
   } catch (error) {
