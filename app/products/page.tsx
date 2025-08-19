@@ -9,19 +9,89 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
+import { Toaster } from "@/components/ui/sonner"
+import { toast } from "sonner"
 import { 
   Plus, 
   Search, 
   Edit, 
   Trash2,
-  Package
+  Package,
+  Loader2,
+  AlertTriangle
 } from "lucide-react"
+
+interface Product {
+  id: string
+  name: string
+  description?: string
+  price: number
+  wholesalePrice?: number
+  stock: number
+  barcode?: string
+  image?: string
+  isActive: boolean
+  category: {
+    id: string
+    name: string
+  }
+  createdAt: string
+  updatedAt: string
+}
+
+interface Category {
+  id: string
+  name: string
+  description?: string
+  _count?: {
+    products: number
+  }
+}
+
+interface ProductFormData {
+  name: string
+  description: string
+  price: string
+  wholesalePrice: string
+  stock: string
+  categoryId: string
+  barcode: string
+  image: string
+}
+
+const initialFormData: ProductFormData = {
+  name: "",
+  description: "",
+  price: "",
+  wholesalePrice: "",
+  stock: "0",
+  categoryId: "",
+  barcode: "",
+  image: ""
+}
 
 export default function ProductsPage() {
   const { user, logout } = useAuth()
   const [currentTime, setCurrentTime] = useState("")
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
+  const [products, setProducts] = useState<Product[]>([])
+  const [categories, setCategories] = useState<Category[]>([])
+  const [loading, setLoading] = useState(true)
+  const [submitting, setSubmitting] = useState(false)
+  
+  // Dialog states
+  const [showAddDialog, setShowAddDialog] = useState(false)
+  const [showEditDialog, setShowEditDialog] = useState(false)
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
+  const [formData, setFormData] = useState<ProductFormData>(initialFormData)
+  const [formErrors, setFormErrors] = useState<Partial<ProductFormData>>({})
 
   // Update time every second
   useEffect(() => {
@@ -42,6 +112,163 @@ export default function ProductsPage() {
     return () => clearInterval(interval)
   }, [])
 
+  // Fetch products and categories
+  useEffect(() => {
+    fetchData()
+  }, [])
+
+  const fetchData = async () => {
+    setLoading(true)
+    try {
+      const [productsRes, categoriesRes] = await Promise.all([
+        fetch('/api/products'),
+        fetch('/api/categories')
+      ])
+
+      if (!productsRes.ok) throw new Error('Gagal memuat data produk')
+      if (!categoriesRes.ok) throw new Error('Gagal memuat data kategori')
+
+      const productsData = await productsRes.json()
+      const categoriesData = await categoriesRes.json()
+
+      setProducts(productsData)
+      setCategories(categoriesData)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Terjadi kesalahan saat memuat data")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const validateForm = (data: ProductFormData): boolean => {
+    const errors: Partial<ProductFormData> = {}
+    
+    if (!data.name.trim()) errors.name = "Nama produk harus diisi"
+    if (!data.price || parseFloat(data.price) <= 0) errors.price = "Harga produk harus lebih dari 0"
+    if (!data.categoryId) errors.categoryId = "Kategori produk harus dipilih"
+    if (data.stock && parseInt(data.stock) < 0) errors.stock = "Stok tidak boleh negatif"
+    if (data.wholesalePrice && parseFloat(data.wholesalePrice) <= 0) errors.wholesalePrice = "Harga grosir harus lebih dari 0"
+    
+    setFormErrors(errors)
+    return Object.keys(errors).length === 0
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    if (!validateForm(formData)) return
+    
+    setSubmitting(true)
+    try {
+      const url = selectedProduct ? `/api/products/${selectedProduct.id}` : '/api/products'
+      const method = selectedProduct ? 'PUT' : 'POST'
+      
+      const response = await fetch(url, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: formData.name.trim(),
+          description: formData.description.trim() || null,
+          price: parseFloat(formData.price),
+          wholesalePrice: formData.wholesalePrice ? parseFloat(formData.wholesalePrice) : null,
+          stock: parseInt(formData.stock) || 0,
+          categoryId: formData.categoryId,
+          barcode: formData.barcode.trim() || null,
+          image: formData.image.trim() || null,
+        }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Terjadi kesalahan')
+      }
+
+      toast.success(selectedProduct ? "Produk berhasil diperbarui" : "Produk berhasil ditambahkan")
+
+      // Reset form and close dialog
+      setFormData(initialFormData)
+      setFormErrors({})
+      setShowAddDialog(false)
+      setShowEditDialog(false)
+      setSelectedProduct(null)
+      
+      // Refresh data
+      await fetchData()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Terjadi kesalahan")
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!selectedProduct) return
+    
+    setSubmitting(true)
+    try {
+      const response = await fetch(`/api/products/${selectedProduct.id}`, {
+        method: 'DELETE',
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Gagal menghapus produk')
+      }
+
+      toast.success("Produk berhasil dihapus")
+
+      setShowDeleteDialog(false)
+      setSelectedProduct(null)
+      await fetchData()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Terjadi kesalahan saat menghapus")
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const openAddDialog = () => {
+    setFormData(initialFormData)
+    setFormErrors({})
+    setSelectedProduct(null)
+    setShowAddDialog(true)
+  }
+
+  const openEditDialog = (product: Product) => {
+    setFormData({
+      name: product.name,
+      description: product.description || "",
+      price: product.price.toString(),
+      wholesalePrice: product.wholesalePrice?.toString() || "",
+      stock: product.stock.toString(),
+      categoryId: product.category.id,
+      barcode: product.barcode || "",
+      image: product.image || ""
+    })
+    setFormErrors({})
+    setSelectedProduct(product)
+    setShowEditDialog(true)
+  }
+
+  const openDeleteDialog = (product: Product) => {
+    setSelectedProduct(product)
+    setShowDeleteDialog(true)
+  }
+
+  const getStockStatus = (stock: number) => {
+    if (stock === 0) return { text: "Habis", variant: "destructive" as const }
+    if (stock <= 10) return { text: "Stok Rendah", variant: "secondary" as const }
+    return { text: "Tersedia", variant: "default" as const }
+  }
+
+  const filteredProducts = products.filter(product =>
+    product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    product.category.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (product.barcode && product.barcode.toLowerCase().includes(searchTerm.toLowerCase()))
+  )
+
   const handleSettings = () => {
     console.log("Settings clicked")
   }
@@ -53,19 +280,6 @@ export default function ProductsPage() {
   const handleLogout = async () => {
     await logout()
   }
-
-  // Dummy product data
-  const products = [
-    { id: 1, name: "Kopi Arabica", category: "Minuman", price: 25000, stock: 50, status: "Tersedia" },
-    { id: 2, name: "Roti Tawar", category: "Makanan", price: 15000, stock: 25, status: "Tersedia" },
-    { id: 3, name: "Susu UHT", category: "Minuman", price: 8000, stock: 100, status: "Tersedia" },
-    { id: 4, name: "Biskuit Coklat", category: "Makanan", price: 12000, stock: 5, status: "Stok Rendah" },
-    { id: 5, name: "Air Mineral", category: "Minuman", price: 3000, stock: 0, status: "Habis" }
-  ]
-
-  const filteredProducts = products.filter(product =>
-    product.name.toLowerCase().includes(searchTerm.toLowerCase())
-  )
 
   return (
     <ProtectedRoute>
@@ -95,7 +309,7 @@ export default function ProductsPage() {
                   <h1 className="text-2xl font-bold text-gray-900 mb-2">Kelola Produk</h1>
                   <p className="text-gray-600">Kelola produk dan stok toko Anda</p>
                 </div>
-                <Button className="gap-2">
+                <Button onClick={openAddDialog} className="gap-2">
                   <Plus className="h-4 w-4" />
                   Tambah Produk
                 </Button>
@@ -114,7 +328,6 @@ export default function ProductsPage() {
                         className="pl-10"
                       />
                     </div>
-                    <Button variant="outline">Filter</Button>
                   </div>
                 </CardContent>
               </Card>
@@ -128,55 +341,279 @@ export default function ProductsPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead>
-                        <tr className="border-b">
-                          <th className="text-left p-4">Nama Produk</th>
-                          <th className="text-left p-4">Kategori</th>
-                          <th className="text-left p-4">Harga</th>
-                          <th className="text-left p-4">Stok</th>
-                          <th className="text-left p-4">Status</th>
-                          <th className="text-left p-4">Aksi</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {filteredProducts.map((product) => (
-                          <tr key={product.id} className="border-b hover:bg-gray-50">
-                            <td className="p-4 font-medium">{product.name}</td>
-                            <td className="p-4 text-gray-600">{product.category}</td>
-                            <td className="p-4">Rp {product.price.toLocaleString('id-ID')}</td>
-                            <td className="p-4">{product.stock}</td>
-                            <td className="p-4">
-                              <Badge
-                                variant={
-                                  product.status === "Tersedia" ? "default" :
-                                  product.status === "Stok Rendah" ? "secondary" : "destructive"
-                                }
-                              >
-                                {product.status}
-                              </Badge>
-                            </td>
-                            <td className="p-4">
-                              <div className="flex gap-2">
-                                <Button size="sm" variant="outline">
-                                  <Edit className="h-3 w-3" />
-                                </Button>
-                                <Button size="sm" variant="outline">
-                                  <Trash2 className="h-3 w-3" />
-                                </Button>
-                              </div>
-                            </td>
+                  {loading ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="h-8 w-8 animate-spin" />
+                      <span className="ml-2">Memuat data produk...</span>
+                    </div>
+                  ) : filteredProducts.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">
+                      {searchTerm ? "Tidak ada produk yang ditemukan" : "Belum ada produk"}
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead>
+                          <tr className="border-b">
+                            <th className="text-left p-4">Nama Produk</th>
+                            <th className="text-left p-4">Kategori</th>
+                            <th className="text-left p-4">Barcode</th>
+                            <th className="text-left p-4">Harga Eceran</th>
+                            <th className="text-left p-4">Harga Grosir</th>
+                            <th className="text-left p-4">Stok</th>
+                            <th className="text-left p-4">Status</th>
+                            <th className="text-left p-4">Aksi</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                        </thead>
+                        <tbody>
+                          {filteredProducts.map((product) => {
+                            const stockStatus = getStockStatus(product.stock)
+                            return (
+                              <tr key={product.id} className="border-b hover:bg-gray-50">
+                                <td className="p-4">
+                                  <div>
+                                    <div className="font-medium">{product.name}</div>
+                                    {product.description && (
+                                      <div className="text-sm text-gray-500">{product.description}</div>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="p-4 text-gray-600">{product.category.name}</td>
+                                <td className="p-4 text-gray-600">{product.barcode || '-'}</td>
+                                <td className="p-4">Rp {product.price.toLocaleString('id-ID')}</td>
+                                <td className="p-4">
+                                  {product.wholesalePrice 
+                                    ? `Rp ${product.wholesalePrice.toLocaleString('id-ID')}` 
+                                    : '-'
+                                  }
+                                </td>
+                                <td className="p-4">{product.stock}</td>
+                                <td className="p-4">
+                                  <Badge variant={stockStatus.variant}>
+                                    {stockStatus.text}
+                                  </Badge>
+                                </td>
+                                <td className="p-4">
+                                  <div className="flex gap-2">
+                                    <Button 
+                                      size="sm" 
+                                      variant="outline"
+                                      onClick={() => openEditDialog(product)}
+                                    >
+                                      <Edit className="h-3 w-3" />
+                                    </Button>
+                                    <Button 
+                                      size="sm" 
+                                      variant="outline"
+                                      onClick={() => openDeleteDialog(product)}
+                                    >
+                                      <Trash2 className="h-3 w-3" />
+                                    </Button>
+                                  </div>
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </div>
           </div>
         </div>
+
+        {/* Add/Edit Product Dialog */}
+        <Dialog open={showAddDialog || showEditDialog} onOpenChange={(open) => {
+          if (!open) {
+            setShowAddDialog(false)
+            setShowEditDialog(false)
+            setSelectedProduct(null)
+            setFormData(initialFormData)
+            setFormErrors({})
+          }
+        }}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>
+                {selectedProduct ? 'Edit Produk' : 'Tambah Produk Baru'}
+              </DialogTitle>
+            </DialogHeader>
+            
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="name">Nama Produk *</Label>
+                  <Input
+                    id="name"
+                    value={formData.name}
+                    onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                    placeholder="Masukkan nama produk"
+                    className={formErrors.name ? "border-red-500" : ""}
+                  />
+                  {formErrors.name && (
+                    <p className="text-sm text-red-500">{formErrors.name}</p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="categoryId">Kategori *</Label>
+                  <Select
+                    value={formData.categoryId}
+                    onValueChange={(value) => setFormData(prev => ({ ...prev, categoryId: value }))}
+                  >
+                    <SelectTrigger className={formErrors.categoryId ? "border-red-500" : ""}>
+                      <SelectValue placeholder="Pilih kategori" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {categories.map((category) => (
+                        <SelectItem key={category.id} value={category.id}>
+                          {category.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {formErrors.categoryId && (
+                    <p className="text-sm text-red-500">{formErrors.categoryId}</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="description">Deskripsi</Label>
+                <Textarea
+                  id="description"
+                  value={formData.description}
+                  onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+                  placeholder="Deskripsi produk (opsional)"
+                  rows={3}
+                />
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="price">Harga Eceran *</Label>
+                  <Input
+                    id="price"
+                    type="number"
+                    step="0.01"
+                    value={formData.price}
+                    onChange={(e) => setFormData(prev => ({ ...prev, price: e.target.value }))}
+                    placeholder="0"
+                    className={formErrors.price ? "border-red-500" : ""}
+                  />
+                  {formErrors.price && (
+                    <p className="text-sm text-red-500">{formErrors.price}</p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="wholesalePrice">Harga Grosir</Label>
+                  <Input
+                    id="wholesalePrice"
+                    type="number"
+                    step="0.01"
+                    value={formData.wholesalePrice}
+                    onChange={(e) => setFormData(prev => ({ ...prev, wholesalePrice: e.target.value }))}
+                    placeholder="0"
+                    className={formErrors.wholesalePrice ? "border-red-500" : ""}
+                  />
+                  {formErrors.wholesalePrice && (
+                    <p className="text-sm text-red-500">{formErrors.wholesalePrice}</p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="stock">Stok</Label>
+                  <Input
+                    id="stock"
+                    type="number"
+                    value={formData.stock}
+                    onChange={(e) => setFormData(prev => ({ ...prev, stock: e.target.value }))}
+                    placeholder="0"
+                    className={formErrors.stock ? "border-red-500" : ""}
+                  />
+                  {formErrors.stock && (
+                    <p className="text-sm text-red-500">{formErrors.stock}</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="barcode">Barcode</Label>
+                  <Input
+                    id="barcode"
+                    value={formData.barcode}
+                    onChange={(e) => setFormData(prev => ({ ...prev, barcode: e.target.value }))}
+                    placeholder="Barcode produk (opsional)"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="image">URL Gambar</Label>
+                  <Input
+                    id="image"
+                    value={formData.image}
+                    onChange={(e) => setFormData(prev => ({ ...prev, image: e.target.value }))}
+                    placeholder="URL gambar produk (opsional)"
+                  />
+                </div>
+              </div>
+
+              <DialogFooter>
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  onClick={() => {
+                    setShowAddDialog(false)
+                    setShowEditDialog(false)
+                    setSelectedProduct(null)
+                    setFormData(initialFormData)
+                    setFormErrors({})
+                  }}
+                  disabled={submitting}
+                >
+                  Batal
+                </Button>
+                <Button type="submit" disabled={submitting}>
+                  {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  {selectedProduct ? 'Perbarui' : 'Simpan'}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Confirmation Dialog */}
+        <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-red-500" />
+                <AlertDialogTitle>Konfirmasi Hapus</AlertDialogTitle>
+              </div>
+              <AlertDialogDescription>
+                Apakah Anda yakin ingin menghapus produk <strong>{selectedProduct?.name}</strong>?
+                Tindakan ini tidak dapat dibatalkan.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={submitting}>Batal</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleDelete}
+                disabled={submitting}
+                className="bg-red-500 hover:bg-red-600"
+              >
+                {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Hapus
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        <Toaster richColors />
       </div>
     </ProtectedRoute>
   )

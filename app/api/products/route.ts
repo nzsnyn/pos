@@ -4,91 +4,38 @@ import { prisma } from '@/lib/prisma'
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
-    const page = parseInt(searchParams.get('page') || '1')
-    const limit = parseInt(searchParams.get('limit') || '50')
-    const search = searchParams.get('search') || ''
-    const category = searchParams.get('category') || 'all'
-    const status = searchParams.get('status') || 'all'
+    const category = searchParams.get('category')
+    const search = searchParams.get('search')
 
-    const skip = (page - 1) * limit
+    const where: any = {
+      isActive: true,
+    }
 
-    // Build where clause
-    const where: any = {}
-    
+    if (category && category !== 'all') {
+      where.category = {
+        name: category
+      }
+    }
+
     if (search) {
       where.OR = [
-        { name: { contains: search, mode: 'insensitive' } },
-        { description: { contains: search, mode: 'insensitive' } },
-        { barcode: { contains: search, mode: 'insensitive' } },
-        { sku: { contains: search, mode: 'insensitive' } }
+        { name: { contains: search } },
+        { description: { contains: search } },
+        { category: { name: { contains: search } } }
       ]
     }
 
-    if (category !== 'all') {
-      where.categoryId = category
-    }
-
-    if (status !== 'all') {
-      if (status === 'active') {
-        where.isActive = true
-      } else if (status === 'inactive') {
-        where.isActive = false
-      } else if (status === 'low_stock') {
-        // Products where stock is less than or equal to minStock
-        where.AND = [
-          { isActive: true }
-        ]
-      } else if (status === 'out_of_stock') {
-        where.AND = [
-          { isActive: true },
-          { stock: { equals: 0 } }
-        ]
-      }
-    }
-
-    // Get products with related data
-    const [products, totalCount] = await Promise.all([
-      prisma.product.findMany({
-        where,
-        include: {
-          category: {
-            select: {
-              id: true,
-              name: true
-            }
-          },
-          unit: {
-            select: {
-              id: true,
-              name: true,
-              symbol: true
-            }
-          }
-        },
-        orderBy: { createdAt: 'desc' },
-        skip,
-        take: limit
-      }),
-      prisma.product.count({ where })
-    ])
-
-    // Add computed status for each product
-    const productsWithStatus = products.map(product => ({
-      ...product,
-      status: product.isActive 
-        ? (product.stock === 0 ? 'out_of_stock' : (product.stock <= product.minStock ? 'low_stock' : 'in_stock'))
-        : 'inactive'
-    }))
-
-    return NextResponse.json({
-      products: productsWithStatus,
-      pagination: {
-        page,
-        limit,
-        total: totalCount,
-        totalPages: Math.ceil(totalCount / limit)
-      }
+    const products = await prisma.product.findMany({
+      where,
+      include: {
+        category: true,
+      },
+      orderBy: {
+        name: 'asc',
+      },
     })
+
+    return NextResponse.json(products)
   } catch (error) {
     console.error('Error fetching products:', error)
     return NextResponse.json(
@@ -107,13 +54,9 @@ export async function POST(request: NextRequest) {
       price, 
       wholesalePrice, 
       stock, 
-      minStock, 
-      image, 
-      barcode, 
-      sku,
       categoryId, 
-      unitId,
-      isActive = true 
+      barcode, 
+      image 
     } = body
 
     // Validate required fields
@@ -124,116 +67,51 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    if (!price || price <= 0) {
+      return NextResponse.json(
+        { error: 'Harga produk harus lebih dari 0' },
+        { status: 400 }
+      )
+    }
+
     if (!categoryId) {
       return NextResponse.json(
-        { error: 'Kategori harus dipilih' },
+        { error: 'Kategori produk harus dipilih' },
         { status: 400 }
       )
     }
 
-    if (price === undefined || price < 0) {
-      return NextResponse.json(
-        { error: 'Harga harus diisi dan tidak boleh negatif' },
-        { status: 400 }
-      )
-    }
-
-    // Check if category exists
-    const category = await prisma.category.findUnique({
-      where: { id: categoryId }
-    })
-
-    if (!category) {
-      return NextResponse.json(
-        { error: 'Kategori tidak ditemukan' },
-        { status: 400 }
-      )
-    }
-
-    // Check if unit exists (if provided)
-    if (unitId) {
-      const unit = await prisma.unit.findUnique({
-        where: { id: unitId }
-      })
-
-      if (!unit) {
-        return NextResponse.json(
-          { error: 'Unit tidak ditemukan' },
-          { status: 400 }
-        )
-      }
-    }
-
-    // Check if barcode already exists (if provided)
+    // Check if barcode is unique (if provided)
     if (barcode) {
-      const existingBarcode = await prisma.product.findUnique({
+      const existingBarcode = await prisma.product.findFirst({
         where: { barcode }
       })
 
       if (existingBarcode) {
         return NextResponse.json(
-          { error: 'Barcode sudah digunakan produk lain' },
+          { error: 'Barcode sudah digunakan' },
           { status: 400 }
         )
       }
     }
 
-    // Check if SKU already exists (if provided)
-    if (sku) {
-      const existingSku = await prisma.product.findUnique({
-        where: { sku }
-      })
-
-      if (existingSku) {
-        return NextResponse.json(
-          { error: 'SKU sudah digunakan produk lain' },
-          { status: 400 }
-        )
-      }
-    }
-
-    // Create new product
     const product = await prisma.product.create({
       data: {
         name: name.trim(),
         description: description?.trim() || null,
         price: parseFloat(price),
         wholesalePrice: wholesalePrice ? parseFloat(wholesalePrice) : null,
-        stock: parseInt(stock || 0),
-        minStock: parseInt(minStock || 5),
-        image: image?.trim() || null,
-        barcode: barcode?.trim() || null,
-        sku: sku?.trim() || null,
+        stock: parseInt(stock) || 0,
         categoryId,
-        unitId: unitId || null,
-        isActive
+        barcode: barcode?.trim() || null,
+        image: image?.trim() || null,
       },
       include: {
-        category: {
-          select: {
-            id: true,
-            name: true
-          }
-        },
-        unit: {
-          select: {
-            id: true,
-            name: true,
-            symbol: true
-          }
-        }
-      }
+        category: true,
+      },
     })
 
-    // Add computed status
-    const productWithStatus = {
-      ...product,
-      status: product.isActive 
-        ? (product.stock === 0 ? 'out_of_stock' : (product.stock <= product.minStock ? 'low_stock' : 'in_stock'))
-        : 'inactive'
-    }
-
-    return NextResponse.json({ product: productWithStatus }, { status: 201 })
+    return NextResponse.json(product, { status: 201 })
   } catch (error) {
     console.error('Error creating product:', error)
     return NextResponse.json(

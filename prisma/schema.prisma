@@ -29,14 +29,10 @@ model Product {
   price            Float
   wholesalePrice   Float?
   stock            Int            @default(0)
-  minStock         Int            @default(5)  // minimum stock threshold
   image            String?
   barcode          String?        @unique
-  sku              String?        @unique      // stock keeping unit
   category         Category       @relation(fields: [categoryId], references: [id])
   categoryId       String
-  unit             Unit?          @relation(fields: [unitId], references: [id])
-  unitId           String?
   orderItems       OrderItem[]
   isActive         Boolean        @default(true)
   // Dashboard Analytics Relations
@@ -359,8 +355,8 @@ model Unit {
   symbol      String   @unique  // simbol seperti "kg", "L", "pcs", dll
   description String?  // deskripsi opsional
   isActive    Boolean  @default(true) // status aktif/tidak aktif
-  // Relations
-  products    Product[] // products yang menggunakan unit ini
+  // Relations - untuk nanti ketika produk menggunakan unit
+  // products    Product[] @relation("ProductUnit")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

@@ -11,9 +11,7 @@ async function main() {
   await prisma.orderItem.deleteMany()
   await prisma.order.deleteMany()
   await prisma.product.deleteMany()
-  await prisma.unit.deleteMany()
   await prisma.category.deleteMany()
-  await prisma.supplier.deleteMany()
   await prisma.customer.deleteMany()
   await prisma.user.deleteMany()
   await prisma.shift.deleteMany()
@@ -64,139 +62,47 @@ async function main() {
     })
   ])
 
-  // 2. Create Units
-  console.log('📏 Creating units...')
-  const units = await Promise.all([
-    prisma.unit.create({
-      data: {
-        name: 'Piece',
-        symbol: 'pcs',
-        description: 'Individual piece/item'
-      }
-    }),
-    prisma.unit.create({
-      data: {
-        name: 'Kilogram',
-        symbol: 'kg',
-        description: 'Weight measurement in kilograms'
-      }
-    }),
-    prisma.unit.create({
-      data: {
-        name: 'Gram',
-        symbol: 'g',
-        description: 'Weight measurement in grams'
-      }
-    }),
-    prisma.unit.create({
-      data: {
-        name: 'Liter',
-        symbol: 'L',
-        description: 'Volume measurement in liters'
-      }
-    }),
-    prisma.unit.create({
-      data: {
-        name: 'Mililiter',
-        symbol: 'ml',
-        description: 'Volume measurement in milliliters'
-      }
-    }),
-    prisma.unit.create({
-      data: {
-        name: 'Box',
-        symbol: 'box',
-        description: 'Product sold by box'
-      }
-    }),
-    prisma.unit.create({
-      data: {
-        name: 'Pack',
-        symbol: 'pack',
-        description: 'Product sold by pack'
-      }
-    })
-  ])
-
-  // 3. Create Suppliers
-  console.log('🏪 Creating suppliers...')
-  const suppliers = await Promise.all([
-    prisma.supplier.create({
-      data: {
-        name: 'CV Maju Bersama',
-        phone: '021-12345678',
-        address: 'Jl. Raya Kemang No. 123, Jakarta Selatan',
-        storeName: 'Maju Bersama Distributor',
-        isActive: true
-      }
-    }),
-    prisma.supplier.create({
-      data: {
-        name: 'PT Sumber Rezeki',
-        phone: '022-98765432',
-        address: 'Jl. Asia Afrika No. 456, Bandung',
-        storeName: 'Sumber Rezeki Trading',
-        isActive: true
-      }
-    }),
-    prisma.supplier.create({
-      data: {
-        name: 'Toko Serba Ada',
-        phone: '031-11223344',
-        address: 'Jl. Pemuda No. 789, Surabaya',
-        storeName: 'Serba Ada Wholesale',
-        isActive: true
-      }
-    }),
-    prisma.supplier.create({
-      data: {
-        name: 'UD Berkah Jaya',
-        phone: '0274-556677',
-        address: 'Jl. Malioboro No. 321, Yogyakarta',
-        storeName: 'Berkah Jaya Supplier',
-        isActive: false
-      }
-    })
-  ])
-
-  // 4. Create Products
+  // 2. Create Products
   console.log('📦 Creating products...')
   const products = [
     // Minuman
-    { name: 'Kopi Arabica Premium', description: 'Kopi premium dengan kualitas terbaik', price: 25000, wholesalePrice: 18000, stock: 45, minStock: 10, categoryId: categories[0].id, unitId: units[6].id, barcode: '8901234567890', sku: 'KAP001' },
-    { name: 'Teh Hijau Melati', description: 'Teh hijau dengan aroma melati yang menyegarkan', price: 15000, wholesalePrice: 11000, stock: 60, minStock: 15, categoryId: categories[0].id, unitId: units[6].id, barcode: '8901234567891', sku: 'THM001' },
-    { name: 'Jus Jeruk Segar', description: 'Jus jeruk segar tanpa pengawet', price: 18000, wholesalePrice: 13000, stock: 35, minStock: 10, categoryId: categories[0].id, unitId: units[0].id, barcode: '8901234567892', sku: 'JJS001' },
-    { name: 'Air Mineral 600ml', description: 'Air mineral murni dalam kemasan 600ml', price: 3000, wholesalePrice: 2200, stock: 150, minStock: 50, categoryId: categories[0].id, unitId: units[0].id, barcode: '8901234567893', sku: 'AM600' },
-    { name: 'Susu UHT Coklat', description: 'Susu UHT rasa coklat yang lezat', price: 8000, wholesalePrice: 6000, stock: 80, minStock: 20, categoryId: categories[0].id, unitId: units[0].id, barcode: '8901234567894', sku: 'SUC001' },
+    { name: 'Kopi Arabica Premium', price: 25000, wholesalePrice: 18000, stock: 45, categoryId: categories[0].id, barcode: '8901234567890' },
+    { name: 'Teh Hijau Melati', price: 15000, wholesalePrice: 11000, stock: 60, categoryId: categories[0].id, barcode: '8901234567891' },
+    { name: 'Jus Jeruk Segar', price: 18000, wholesalePrice: 13000, stock: 35, categoryId: categories[0].id, barcode: '8901234567892' },
+    { name: 'Air Mineral 600ml', price: 3000, wholesalePrice: 2200, stock: 150, categoryId: categories[0].id, barcode: '8901234567893' },
+    { name: 'Susu UHT Coklat', price: 8000, wholesalePrice: 6000, stock: 80, categoryId: categories[0].id, barcode: '8901234567894' },
     
     // Makanan Ringan
-    { name: 'Keripik Kentang Original', description: 'Keripik kentang rasa original yang renyah', price: 12000, wholesalePrice: 8500, stock: 25, minStock: 8, categoryId: categories[1].id, unitId: units[6].id, barcode: '8901234567895', sku: 'KKO001' },
-    { name: 'Biskuit Coklat', description: 'Biskuit dengan rasa coklat yang manis', price: 15000, wholesalePrice: 11000, stock: 40, minStock: 12, categoryId: categories[1].id, unitId: units[6].id, barcode: '8901234567896', sku: 'BC001' },
-    { name: 'Kacang Tanah Asin', description: 'Kacang tanah goreng dengan rasa asin', price: 10000, wholesalePrice: 7500, stock: 30, minStock: 10, categoryId: categories[1].id, unitId: units[6].id, barcode: '8901234567897', sku: 'KTA001' },
-    { name: 'Permen Mint', description: 'Permen dengan rasa mint yang menyegarkan', price: 5000, wholesalePrice: 3500, stock: 100, minStock: 25, categoryId: categories[1].id, unitId: units[6].id, barcode: '8901234567898', sku: 'PM001' },
+    { name: 'Keripik Kentang Original', price: 12000, wholesalePrice: 8500, stock: 25, categoryId: categories[1].id, barcode: '8901234567895' },
+    { name: 'Biskuit Coklat', price: 15000, wholesalePrice: 11000, stock: 40, categoryId: categories[1].id, barcode: '8901234567896' },
+    { name: 'Kacang Tanah Asin', price: 10000, wholesalePrice: 7500, stock: 30, categoryId: categories[1].id, barcode: '8901234567897' },
+    { name: 'Permen Mint', price: 5000, wholesalePrice: 3500, stock: 100, categoryId: categories[1].id, barcode: '8901234567898' },
     
     // Roti & Kue
-    { name: 'Roti Tawar Gandum', description: 'Roti tawar dari gandum berkualitas', price: 8000, wholesalePrice: 6000, stock: 20, minStock: 5, categoryId: categories[2].id, unitId: units[0].id, barcode: '8901234567899', sku: 'RTG001' },
-    { name: 'Donat Glazur', description: 'Donat manis dengan lapisan glazur', price: 6000, wholesalePrice: 4000, stock: 15, minStock: 5, categoryId: categories[2].id, unitId: units[0].id, barcode: '8901234567900', sku: 'DG001' },
-    { name: 'Croissant Butter', description: 'Croissant dengan butter yang lembut', price: 12000, wholesalePrice: 8500, stock: 18, minStock: 6, categoryId: categories[2].id, unitId: units[0].id, barcode: '8901234567901', sku: 'CB001' },
+    { name: 'Roti Tawar Gandum', price: 8000, wholesalePrice: 6000, stock: 20, categoryId: categories[2].id, barcode: '8901234567899' },
+    { name: 'Donat Glazur', price: 6000, wholesalePrice: 4000, stock: 15, categoryId: categories[2].id, barcode: '8901234567900' },
+    { name: 'Croissant Butter', price: 12000, wholesalePrice: 8500, stock: 18, categoryId: categories[2].id, barcode: '8901234567901' },
     
     // Kebutuhan Harian
-    { name: 'Sabun Mandi Herbal', description: 'Sabun mandi herbal dengan bahan alami', price: 15000, wholesalePrice: 11500, stock: 50, minStock: 15, categoryId: categories[3].id, unitId: units[0].id, barcode: '8901234567902', sku: 'SMH001' },
-    { name: 'Shampoo Anti Ketombe', description: 'Shampoo khusus untuk mengatasi ketombe', price: 25000, wholesalePrice: 19000, stock: 35, minStock: 10, categoryId: categories[3].id, unitId: units[0].id, barcode: '8901234567903', sku: 'SAK001' },
-    { name: 'Pasta Gigi Mint', description: 'Pasta gigi dengan rasa mint yang segar', price: 12000, wholesalePrice: 9000, stock: 45, minStock: 15, categoryId: categories[3].id, unitId: units[0].id, barcode: '8901234567904', sku: 'PGM001' },
-    { name: 'Tissue Wajah', description: 'Tissue wajah lembut untuk kebutuhan harian', price: 8000, wholesalePrice: 6000, stock: 7, minStock: 10, categoryId: categories[3].id, unitId: units[5].id, barcode: '8901234567905', sku: 'TW001' },
+    { name: 'Sabun Mandi Herbal', price: 15000, wholesalePrice: 11500, stock: 50, categoryId: categories[3].id, barcode: '8901234567902' },
+    { name: 'Shampoo Anti Ketombe', price: 25000, wholesalePrice: 19000, stock: 35, categoryId: categories[3].id, barcode: '8901234567903' },
+    { name: 'Pasta Gigi Mint', price: 12000, wholesalePrice: 9000, stock: 45, categoryId: categories[3].id, barcode: '8901234567904' },
+    { name: 'Tissue Wajah', price: 8000, wholesalePrice: 6000, stock: 7, categoryId: categories[3].id, barcode: '8901234567905' },
     
     // Elektronik
-    { name: 'Kabel USB-C 1m', description: 'Kabel USB-C berkualitas tinggi panjang 1 meter', price: 35000, wholesalePrice: 25000, stock: 22, minStock: 8, categoryId: categories[4].id, unitId: units[0].id, barcode: '8901234567906', sku: 'KUC001' },
-    { name: 'Powerbank 10000mAh', description: 'Powerbank dengan kapasitas 10000mAh', price: 150000, wholesalePrice: 120000, stock: 8, minStock: 3, categoryId: categories[4].id, unitId: units[0].id, barcode: '8901234567907', sku: 'PB10K' },
-    { name: 'Earphone Bluetooth', description: 'Earphone wireless dengan teknologi Bluetooth', price: 85000, wholesalePrice: 65000, stock: 12, minStock: 5, categoryId: categories[4].id, unitId: units[0].id, barcode: '8901234567908', sku: 'EBT001' },
-    { name: 'Charger Quick Charge', description: 'Charger dengan teknologi fast charging', price: 45000, wholesalePrice: 32000, stock: 3, minStock: 5, categoryId: categories[4].id, unitId: units[0].id, barcode: '8901234567909', sku: 'CQC001' }
+    { name: 'Kabel USB-C 1m', price: 35000, wholesalePrice: 25000, stock: 22, categoryId: categories[4].id, barcode: '8901234567906' },
+    { name: 'Powerbank 10000mAh', price: 150000, wholesalePrice: 120000, stock: 8, categoryId: categories[4].id, barcode: '8901234567907' },
+    { name: 'Earphone Bluetooth', price: 85000, wholesalePrice: 65000, stock: 12, categoryId: categories[4].id, barcode: '8901234567908' },
+    { name: 'Charger Quick Charge', price: 45000, wholesalePrice: 32000, stock: 3, categoryId: categories[4].id, barcode: '8901234567909' }
   ]
 
   const createdProducts: Array<{id: string, name: string, price: number}> = []
   for (const product of products) {
     const createdProduct = await prisma.product.create({
-      data: product
+      data: {
+        ...product,
+        description: `Produk berkualitas tinggi - ${product.name}`
+      }
     })
     createdProducts.push(createdProduct)
   }

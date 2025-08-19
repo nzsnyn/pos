@@ -8,24 +8,11 @@ export async function GET(
 ) {
   try {
     const { id } = await params
-
     const product = await prisma.product.findUnique({
       where: { id },
       include: {
-        category: {
-          select: {
-            id: true,
-            name: true
-          }
-        },
-        unit: {
-          select: {
-            id: true,
-            name: true,
-            symbol: true
-          }
-        }
-      }
+        category: true,
+      },
     })
 
     if (!product) {
@@ -35,15 +22,7 @@ export async function GET(
       )
     }
 
-    // Add computed status
-    const productWithStatus = {
-      ...product,
-      status: product.isActive 
-        ? (product.stock === 0 ? 'out_of_stock' : (product.stock <= product.minStock ? 'low_stock' : 'in_stock'))
-        : 'inactive'
-    }
-
-    return NextResponse.json({ product: productWithStatus })
+    return NextResponse.json(product)
   } catch (error) {
     console.error('Error fetching product:', error)
     return NextResponse.json(
@@ -67,14 +46,26 @@ export async function PUT(
       price, 
       wholesalePrice, 
       stock, 
-      minStock, 
-      image, 
-      barcode, 
-      sku,
       categoryId, 
-      unitId,
+      barcode, 
+      image, 
       isActive 
     } = body
+
+    // Validate required fields
+    if (!name || !name.trim()) {
+      return NextResponse.json(
+        { error: 'Nama produk harus diisi' },
+        { status: 400 }
+      )
+    }
+
+    if (!price || price <= 0) {
+      return NextResponse.json(
+        { error: 'Harga produk harus lebih dari 0' },
+        { status: 400 }
+      )
+    }
 
     // Check if product exists
     const existingProduct = await prisma.product.findUnique({
@@ -88,77 +79,18 @@ export async function PUT(
       )
     }
 
-    // Validate required fields
-    if (!name || !name.trim()) {
-      return NextResponse.json(
-        { error: 'Nama produk harus diisi' },
-        { status: 400 }
-      )
-    }
-
-    if (!categoryId) {
-      return NextResponse.json(
-        { error: 'Kategori harus dipilih' },
-        { status: 400 }
-      )
-    }
-
-    if (price === undefined || price < 0) {
-      return NextResponse.json(
-        { error: 'Harga harus diisi dan tidak boleh negatif' },
-        { status: 400 }
-      )
-    }
-
-    // Check if category exists
-    const category = await prisma.category.findUnique({
-      where: { id: categoryId }
-    })
-
-    if (!category) {
-      return NextResponse.json(
-        { error: 'Kategori tidak ditemukan' },
-        { status: 400 }
-      )
-    }
-
-    // Check if unit exists (if provided)
-    if (unitId) {
-      const unit = await prisma.unit.findUnique({
-        where: { id: unitId }
-      })
-
-      if (!unit) {
-        return NextResponse.json(
-          { error: 'Unit tidak ditemukan' },
-          { status: 400 }
-        )
-      }
-    }
-
-    // Check if barcode already exists (if provided and different from current)
+    // Check if barcode is unique (if provided and different from current)
     if (barcode && barcode !== existingProduct.barcode) {
-      const existingBarcode = await prisma.product.findUnique({
-        where: { barcode }
+      const duplicateBarcode = await prisma.product.findFirst({
+        where: {
+          barcode,
+          NOT: { id }
+        }
       })
 
-      if (existingBarcode && existingBarcode.id !== id) {
+      if (duplicateBarcode) {
         return NextResponse.json(
           { error: 'Barcode sudah digunakan produk lain' },
-          { status: 400 }
-        )
-      }
-    }
-
-    // Check if SKU already exists (if provided and different from current)
-    if (sku && sku !== existingProduct.sku) {
-      const existingSku = await prisma.product.findUnique({
-        where: { sku }
-      })
-
-      if (existingSku && existingSku.id !== id) {
-        return NextResponse.json(
-          { error: 'SKU sudah digunakan produk lain' },
           { status: 400 }
         )
       }
@@ -172,42 +104,18 @@ export async function PUT(
         description: description?.trim() || null,
         price: parseFloat(price),
         wholesalePrice: wholesalePrice ? parseFloat(wholesalePrice) : null,
-        stock: stock !== undefined ? parseInt(stock) : existingProduct.stock,
-        minStock: minStock !== undefined ? parseInt(minStock) : existingProduct.minStock,
-        image: image?.trim() || null,
-        barcode: barcode?.trim() || null,
-        sku: sku?.trim() || null,
+        stock: parseInt(stock) || 0,
         categoryId,
-        unitId: unitId || null,
-        isActive: isActive !== undefined ? isActive : existingProduct.isActive,
-        updatedAt: new Date()
+        barcode: barcode?.trim() || null,
+        image: image?.trim() || null,
+        isActive: isActive !== undefined ? isActive : existingProduct.isActive
       },
       include: {
-        category: {
-          select: {
-            id: true,
-            name: true
-          }
-        },
-        unit: {
-          select: {
-            id: true,
-            name: true,
-            symbol: true
-          }
-        }
-      }
+        category: true,
+      },
     })
 
-    // Add computed status
-    const productWithStatus = {
-      ...product,
-      status: product.isActive 
-        ? (product.stock === 0 ? 'out_of_stock' : (product.stock <= product.minStock ? 'low_stock' : 'in_stock'))
-        : 'inactive'
-    }
-
-    return NextResponse.json({ product: productWithStatus })
+    return NextResponse.json(product)
   } catch (error) {
     console.error('Error updating product:', error)
     return NextResponse.json(
@@ -224,7 +132,7 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params
-
+    
     // Check if product exists
     const existingProduct = await prisma.product.findUnique({
       where: { id }
@@ -237,14 +145,29 @@ export async function DELETE(
       )
     }
 
-    // Delete product
-    await prisma.product.delete({
-      where: { id }
+    // Instead of hard delete, we'll set isActive to false (soft delete)
+    const product = await prisma.product.update({
+      where: { id },
+      data: {
+        isActive: false
+      }
     })
 
-    return NextResponse.json({ message: 'Produk berhasil dihapus' })
+    return NextResponse.json({ 
+      message: 'Produk berhasil dihapus',
+      deletedId: id 
+    })
   } catch (error) {
     console.error('Error deleting product:', error)
+    
+    // Check if it's a foreign key constraint error
+    if (error instanceof Error && error.message.includes('foreign key')) {
+      return NextResponse.json(
+        { error: 'Produk tidak dapat dihapus karena masih terkait dengan transaksi' },
+        { status: 400 }
+      )
+    }
+    
     return NextResponse.json(
       { error: 'Gagal menghapus produk' },
       { status: 500 }
