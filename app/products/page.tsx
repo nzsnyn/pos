@@ -92,6 +92,10 @@ export default function ProductsPage() {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
   const [formData, setFormData] = useState<ProductFormData>(initialFormData)
   const [formErrors, setFormErrors] = useState<Partial<ProductFormData>>({})
+  
+  // File upload states
+  const [uploadedImage, setUploadedImage] = useState<string>("")
+  const [isUploading, setIsUploading] = useState(false)
 
   // Update time every second
   useEffect(() => {
@@ -190,6 +194,7 @@ export default function ProductsPage() {
       // Reset form and close dialog
       setFormData(initialFormData)
       setFormErrors({})
+      setUploadedImage("")
       setShowAddDialog(false)
       setShowEditDialog(false)
       setSelectedProduct(null)
@@ -232,6 +237,7 @@ export default function ProductsPage() {
   const openAddDialog = () => {
     setFormData(initialFormData)
     setFormErrors({})
+    setUploadedImage("")
     setSelectedProduct(null)
     setShowAddDialog(true)
   }
@@ -247,6 +253,7 @@ export default function ProductsPage() {
       barcode: product.barcode || "",
       image: product.image || ""
     })
+    setUploadedImage(product.image || "")
     setFormErrors({})
     setSelectedProduct(product)
     setShowEditDialog(true)
@@ -268,6 +275,33 @@ export default function ProductsPage() {
     product.category.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (product.barcode && product.barcode.toLowerCase().includes(searchTerm.toLowerCase()))
   )
+
+  const handleImageUpload = async (file: File) => {
+    setIsUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+
+      const response = await fetch('/api/upload/image', {
+        method: 'POST',
+        body: formData,
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Gagal mengunggah gambar')
+      }
+
+      const result = await response.json()
+      setUploadedImage(result.url)
+      setFormData(prev => ({ ...prev, image: result.url }))
+      toast.success("Gambar berhasil diunggah")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Gagal mengunggah gambar")
+    } finally {
+      setIsUploading(false)
+    }
+  }
 
   const handleSettings = () => {
     console.log("Settings clicked")
@@ -355,6 +389,7 @@ export default function ProductsPage() {
                       <table className="w-full">
                         <thead>
                           <tr className="border-b">
+                            <th className="text-left p-4">Gambar</th>
                             <th className="text-left p-4">Nama Produk</th>
                             <th className="text-left p-4">Kategori</th>
                             <th className="text-left p-4">Barcode</th>
@@ -370,6 +405,19 @@ export default function ProductsPage() {
                             const stockStatus = getStockStatus(product.stock)
                             return (
                               <tr key={product.id} className="border-b hover:bg-gray-50">
+                                <td className="p-4">
+                                  <div className="w-12 h-12 bg-gray-100 rounded-md overflow-hidden flex items-center justify-center">
+                                    {product.image ? (
+                                      <img
+                                        src={product.image}
+                                        alt={product.name}
+                                        className="w-full h-full object-cover"
+                                      />
+                                    ) : (
+                                      <span className="text-gray-400 text-xs">No Image</span>
+                                    )}
+                                  </div>
+                                </td>
                                 <td className="p-4">
                                   <div>
                                     <div className="font-medium">{product.name}</div>
@@ -432,6 +480,7 @@ export default function ProductsPage() {
             setSelectedProduct(null)
             setFormData(initialFormData)
             setFormErrors({})
+            setUploadedImage("")
           }
         }}>
           <DialogContent className="max-w-2xl">
@@ -552,13 +601,68 @@ export default function ProductsPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="image">URL Gambar</Label>
-                  <Input
-                    id="image"
-                    value={formData.image}
-                    onChange={(e) => setFormData(prev => ({ ...prev, image: e.target.value }))}
-                    placeholder="URL gambar produk (opsional)"
-                  />
+                  <Label htmlFor="image">Gambar Produk</Label>
+                  <div className="space-y-3">
+                    {/* File Upload */}
+                    <div className="flex items-center space-x-3">
+                      <input
+                        type="file"
+                        id="imageFile"
+                        accept="image/*"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0]
+                          if (file) handleImageUpload(file)
+                        }}
+                        className="hidden"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => document.getElementById('imageFile')?.click()}
+                        disabled={isUploading}
+                        className="flex items-center space-x-2"
+                      >
+                        {isUploading ? (
+                          <>
+                            <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                            <span>Mengunggah...</span>
+                          </>
+                        ) : (
+                          <>
+                            <span>📁</span>
+                            <span>Pilih Gambar</span>
+                          </>
+                        )}
+                      </Button>
+                      {uploadedImage && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setUploadedImage("")
+                            setFormData(prev => ({ ...prev, image: "" }))
+                          }}
+                        >
+                          Hapus Gambar
+                        </Button>
+                      )}
+                    </div>
+                    
+                    {/* Image Preview */}
+                    {uploadedImage && (
+                      <div className="mt-3">
+                        <p className="text-sm text-gray-600 mb-2">Preview:</p>
+                        <div className="relative w-32 h-32 border border-gray-300 rounded-lg overflow-hidden">
+                          <img
+                            src={uploadedImage}
+                            alt="Preview"
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -572,6 +676,7 @@ export default function ProductsPage() {
                     setSelectedProduct(null)
                     setFormData(initialFormData)
                     setFormErrors({})
+                    setUploadedImage("")
                   }}
                   disabled={submitting}
                 >
