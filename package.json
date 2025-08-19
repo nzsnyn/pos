@@ -11,7 +11,10 @@
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "db:clear": "tsx scripts/clear-database-safe.ts",
+    "db:clear-auto": "tsx scripts/clear-database-auto.ts",
+    "db:clear-force": "tsx scripts/clear-database.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.14.0",
