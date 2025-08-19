@@ -96,16 +96,6 @@ export function Sidebar({ isOpen, onClose, mode = 'overlay' }: SidebarProps) {
       ]
     },
     {
-      icon: Warehouse,
-      label: "Manajemen Stok",
-      href: "/inventory"
-    },
-    {
-      icon: Users,
-      label: "Kelola Pelanggan",
-      href: "/customers"
-    },
-    {
       icon: User,
       label: "Kelola Karyawan",
       href: "/employees"
@@ -124,11 +114,6 @@ export function Sidebar({ isOpen, onClose, mode = 'overlay' }: SidebarProps) {
       icon: CreditCard,
       label: "Riwayat Pembayaran",
       href: "/riwayat-pembayaran"
-    },
-    {
-      icon: BarChart3,
-      label: "Analitik",
-      href: "/analytics"
     },
     {
       icon: Settings,
@@ -222,7 +207,7 @@ export function Sidebar({ isOpen, onClose, mode = 'overlay' }: SidebarProps) {
             </SheetHeader>
             
             <div className="flex flex-col h-full">
-              <nav className="flex-1 px-4 py-6">
+              <nav className="flex-1 px-4 py-6 overflow-y-auto">
                 <div className="space-y-2">
                   {menuItems.map((item) => renderMenuItem(item))}
                 </div>
@@ -237,7 +222,7 @@ export function Sidebar({ isOpen, onClose, mode = 'overlay' }: SidebarProps) {
           </div>
           
           <div className="flex flex-col h-full">
-            <nav className="flex-1 px-4 py-6">
+            <nav className="flex-1 px-4 py-6 overflow-y-auto">
               <div className="space-y-2">
                 {menuItems.map((item) => renderMenuItem(item))}
               </div>
