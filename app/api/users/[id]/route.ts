@@ -92,7 +92,7 @@ export async function PUT(
       )
     }
 
-    if (!role || !['ADMIN', 'MANAGER', 'CASHIER'].includes(role)) {
+    if (!role || !['ADMIN', 'CASHIER'].includes(role)) {
       return NextResponse.json(
         { error: 'Role tidak valid' },
         { status: 400 }
@@ -142,7 +142,7 @@ export async function PUT(
       email: email.trim().toLowerCase(),
       firstName: firstName.trim(),
       lastName: lastName.trim(),
-      role: role as 'ADMIN' | 'MANAGER' | 'CASHIER',
+      role: role as 'ADMIN' | 'CASHIER',
       isActive: isActive !== undefined ? Boolean(isActive) : existingUser.isActive,
     }
 
@@ -178,17 +178,24 @@ export async function PUT(
   }
 }
 
-// DELETE /api/users/[id] - Delete user (soft delete by setting isActive to false)
+// DELETE /api/users/[id] - Delete user permanently
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params
+    const { searchParams } = new URL(request.url)
+    const permanent = searchParams.get('permanent')
 
     // Check if user exists
     const existingUser = await prisma.user.findUnique({
-      where: { id }
+      where: { id },
+      include: {
+        orders: true,
+        shifts: true,
+        procurements: true
+      }
     })
 
     if (!existingUser) {
@@ -198,29 +205,56 @@ export async function DELETE(
       )
     }
 
-    // Soft delete (set isActive to false)
-    const updatedUser = await prisma.user.update({
-      where: { id },
-      data: { isActive: false },
-      select: {
-        id: true,
-        username: true,
-        email: true,
-        firstName: true,
-        lastName: true,
-        role: true,
-        isActive: true,
-      },
-    })
+    if (permanent === 'true') {
+      // Check if user has any related records
+      if (existingUser.orders.length > 0 || 
+          existingUser.shifts.length > 0 || 
+          existingUser.procurements.length > 0) {
+        return NextResponse.json(
+          { error: 'Karyawan tidak dapat dihapus karena memiliki riwayat transaksi atau data terkait' },
+          { status: 400 }
+        )
+      }
 
-    return NextResponse.json({ 
-      message: 'Karyawan berhasil dinonaktifkan',
-      user: updatedUser 
-    })
+      // Permanently delete user
+      await prisma.user.delete({
+        where: { id }
+      })
+
+      return NextResponse.json({ 
+        message: 'Karyawan berhasil dihapus permanen',
+        deletedUser: {
+          id: existingUser.id,
+          username: existingUser.username,
+          firstName: existingUser.firstName,
+          lastName: existingUser.lastName
+        }
+      })
+    } else {
+      // Soft delete (set isActive to false)
+      const updatedUser = await prisma.user.update({
+        where: { id },
+        data: { isActive: false },
+        select: {
+          id: true,
+          username: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          role: true,
+          isActive: true,
+        },
+      })
+
+      return NextResponse.json({ 
+        message: 'Karyawan berhasil dinonaktifkan',
+        user: updatedUser 
+      })
+    }
   } catch (error) {
-    console.error('Error deactivating user:', error)
+    console.error('Error deleting user:', error)
     return NextResponse.json(
-      { error: 'Gagal menonaktifkan karyawan' },
+      { error: 'Gagal menghapus karyawan' },
       { status: 500 }
     )
   }

@@ -4,6 +4,7 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { useRouter, usePathname } from "next/navigation"
+import { useAuth } from "@/contexts/auth-context"
 import { 
   Home, 
   Package, 
@@ -22,7 +23,8 @@ import {
   Scale,
   Package2,
   ShoppingBag,
-  ClipboardList
+  ClipboardList,
+  Clock
 } from "lucide-react"
 
 interface SidebarProps {
@@ -35,92 +37,152 @@ interface MenuItem {
   icon: any
   label: string
   href?: string
+  roles?: string[] // Add roles field to restrict access
   subItems?: {
     icon: any
     label: string
     href: string
+    roles?: string[] // Add roles field to restrict access for subitems too
   }[]
 }
 
 export function Sidebar({ isOpen, onClose, mode = 'overlay' }: SidebarProps) {
   const router = useRouter()
   const pathname = usePathname()
+  const { user } = useAuth()
   const [expandedItems, setExpandedItems] = useState<string[]>(['Produk', 'Stok Produk'])
 
   const menuItems: MenuItem[] = [
     {
       icon: Home,
       label: "Dashboard",
-      href: "/dashboard"
+      href: "/dashboard",
+      roles: ['ADMIN', 'CASHIER'] // Available for both roles
     },
     {
       icon: ShoppingCart,
       label: "Point of Sale",
-      href: "/"
+      href: "/",
+      roles: ['ADMIN', 'CASHIER'] // Available for both roles
     },
     {
       icon: Package,
       label: "Produk",
+      roles: ['ADMIN'], // Only for ADMIN
       subItems: [
         {
           icon: Box,
           label: "Data Produk",
-          href: "/products"
+          href: "/products",
+          roles: ['ADMIN']
         },
         {
           icon: Package,
           label: "Kategori",
-          href: "/categories"
+          href: "/categories",
+          roles: ['ADMIN']
         },
         {
           icon: Scale,
           label: "Unit Satuan",
-          href: "/units"
+          href: "/units",
+          roles: ['ADMIN']
         }
       ]
     },
     {
       icon: Package2,
       label: "Stok Produk",
+      roles: ['ADMIN', 'CASHIER'], // Available for both roles but limited subitems for CASHIER
       subItems: [
         {
           icon: ShoppingBag,
           label: "Pengadaan Produk",
-          href: "/procurement"
+          href: "/procurement",
+          roles: ['ADMIN'] // Only ADMIN can access procurement
         },
         {
           icon: ClipboardList,
           label: "Stok Opname",
-          href: "/stock-opname"
+          href: "/stock-opname",
+          roles: ['ADMIN', 'CASHIER'] // Both can access stock opname
         }
       ]
     },
     {
+      icon: Receipt,
+      label: "Riwayat Transaksi",
+      href: "/transactions",
+      roles: ['ADMIN', 'CASHIER'] // Available for both roles
+    },
+    {
+      icon: Clock,
+      label: "Riwayat Shift",
+      href: "/shift-history",
+      roles: ['ADMIN', 'CASHIER'] // Available for both roles
+    },
+    // Admin-only menu items
+    {
       icon: User,
       label: "Kelola Karyawan",
-      href: "/employees"
+      href: "/employees",
+      roles: ['ADMIN'] // Only ADMIN
     },
     {
       icon: Truck,
       label: "Data Supplier",
-      href: "/suppliers"
+      href: "/suppliers",
+      roles: ['ADMIN'] // Only ADMIN
     },
     {
       icon: Receipt,
       label: "Laporan Penjualan",
-      href: "/reports"
+      href: "/reports",
+      roles: ['ADMIN'] // Only ADMIN
     },
     {
       icon: CreditCard,
       label: "Riwayat Pembayaran",
-      href: "/riwayat-pembayaran"
+      href: "/riwayat-pembayaran",
+      roles: ['ADMIN'] // Only ADMIN
     },
     {
       icon: Settings,
       label: "Pengaturan",
-      href: "/settings"
+      href: "/settings",
+      roles: ['ADMIN'] // Only ADMIN
     }
   ]
+
+  // Filter menu items based on user role
+  const getFilteredMenuItems = () => {
+    if (!user) return []
+    
+    return menuItems.filter(item => {
+      // If no roles specified, show to everyone
+      if (!item.roles) return true
+      
+      // Check if user role is in allowed roles
+      return item.roles.includes(user.role)
+    }).map(item => {
+      // If item has subitems, filter them too
+      if (item.subItems) {
+        const filteredSubItems = item.subItems.filter(subItem => {
+          if (!subItem.roles) return true
+          return subItem.roles.includes(user.role)
+        })
+        
+        return {
+          ...item,
+          subItems: filteredSubItems
+        }
+      }
+      
+      return item
+    })
+  }
+
+  const filteredMenuItems = getFilteredMenuItems()
 
   const handleNavigation = (href: string) => {
     router.push(href)
@@ -209,7 +271,7 @@ export function Sidebar({ isOpen, onClose, mode = 'overlay' }: SidebarProps) {
             <div className="flex flex-col h-full">
               <nav className="flex-1 px-4 py-6 overflow-y-auto">
                 <div className="space-y-2">
-                  {menuItems.map((item) => renderMenuItem(item))}
+                  {filteredMenuItems.map((item) => renderMenuItem(item))}
                 </div>
               </nav>
             </div>
@@ -224,7 +286,7 @@ export function Sidebar({ isOpen, onClose, mode = 'overlay' }: SidebarProps) {
           <div className="flex flex-col h-full">
             <nav className="flex-1 px-4 py-6 overflow-y-auto">
               <div className="space-y-2">
-                {menuItems.map((item) => renderMenuItem(item))}
+                {filteredMenuItems.map((item) => renderMenuItem(item))}
               </div>
             </nav>
           </div>

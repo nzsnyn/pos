@@ -24,9 +24,10 @@ import {
   User,
   Loader2,
   AlertTriangle,
-  Shield,
   ShieldCheck,
-  UserCheck
+  UserCheck,
+  ToggleLeft,
+  ToggleRight
 } from "lucide-react"
 
 interface Employee {
@@ -35,7 +36,7 @@ interface Employee {
   email: string
   firstName: string
   lastName: string
-  role: 'ADMIN' | 'MANAGER' | 'CASHIER'
+  role: 'ADMIN' | 'CASHIER' | 'MANAGER' // Include MANAGER for existing data
   isActive: boolean
   createdAt: string
   updatedAt: string
@@ -65,20 +66,20 @@ const initialFormData: EmployeeFormData = {
 
 const roleLabels = {
   ADMIN: 'Administrator',
-  MANAGER: 'Manajer',
-  CASHIER: 'Kasir'
+  CASHIER: 'Kasir',
+  MANAGER: 'Manajer (Legacy)' // For existing data
 }
 
 const roleColors = {
   ADMIN: 'bg-red-100 text-red-800',
-  MANAGER: 'bg-blue-100 text-blue-800',
-  CASHIER: 'bg-green-100 text-green-800'
+  CASHIER: 'bg-green-100 text-green-800',
+  MANAGER: 'bg-orange-100 text-orange-800' // For existing data
 }
 
 const roleIcons = {
   ADMIN: ShieldCheck,
-  MANAGER: Shield,
-  CASHIER: UserCheck
+  CASHIER: UserCheck,
+  MANAGER: User // Fallback icon for existing data
 }
 
 export default function EmployeesPage() {
@@ -310,29 +311,59 @@ export default function EmployeesPage() {
     }
   }
 
+  const handleToggleStatus = async (employee: Employee) => {
+    setSubmitting(true)
+    try {
+      const response = await fetch(`/api/users/${employee.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: employee.username,
+          email: employee.email,
+          firstName: employee.firstName,
+          lastName: employee.lastName,
+          role: employee.role,
+          isActive: !employee.isActive,
+        }),
+      })
+
+      if (response.ok) {
+        const updatedEmployee = await response.json()
+        setEmployees(prev => prev.map(emp => emp.id === employee.id ? updatedEmployee : emp))
+        toast.success(`Karyawan berhasil ${employee.isActive ? 'dinonaktifkan' : 'diaktifkan'}`)
+      } else {
+        const error = await response.json()
+        toast.error(error.error || 'Gagal mengubah status karyawan')
+      }
+    } catch (error) {
+      console.error('Error toggling employee status:', error)
+      toast.error('Terjadi kesalahan saat mengubah status')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   const handleDelete = async () => {
     if (!selectedEmployee) return
 
     setSubmitting(true)
     try {
-      const response = await fetch(`/api/users/${selectedEmployee.id}`, {
+      const response = await fetch(`/api/users/${selectedEmployee.id}?permanent=true`, {
         method: 'DELETE',
       })
 
       if (response.ok) {
-        setEmployees(prev => prev.map(emp => 
-          emp.id === selectedEmployee.id ? { ...emp, isActive: false } : emp
-        ))
+        setEmployees(prev => prev.filter(emp => emp.id !== selectedEmployee.id))
         setShowDeleteDialog(false)
         setSelectedEmployee(null)
-        toast.success('Karyawan berhasil dinonaktifkan')
+        toast.success('Karyawan berhasil dihapus permanen')
       } else {
         const error = await response.json()
-        toast.error(error.error || 'Gagal menonaktifkan karyawan')
+        toast.error(error.error || 'Gagal menghapus karyawan')
       }
     } catch (error) {
-      console.error('Error deactivating employee:', error)
-      toast.error('Terjadi kesalahan saat menonaktifkan karyawan')
+      console.error('Error deleting employee:', error)
+      toast.error('Terjadi kesalahan saat menghapus karyawan')
     } finally {
       setSubmitting(false)
     }
@@ -437,7 +468,7 @@ export default function EmployeesPage() {
                             </tr>
                           ) : (
                             filteredEmployees.map((employee) => {
-                              const RoleIcon = roleIcons[employee.role]
+                              const RoleIcon = roleIcons[employee.role] || User // Fallback to User icon
                               return (
                                 <tr key={employee.id} className="border-t hover:bg-gray-50">
                                   <td className="p-4">
@@ -452,9 +483,9 @@ export default function EmployeesPage() {
                                     <div className="text-gray-600">{employee.email}</div>
                                   </td>
                                   <td className="p-4">
-                                    <Badge className={`gap-1 ${roleColors[employee.role]}`}>
+                                    <Badge className={`gap-1 ${roleColors[employee.role] || 'bg-gray-100 text-gray-800'}`}>
                                       <RoleIcon className="h-3 w-3" />
-                                      {roleLabels[employee.role]}
+                                      {roleLabels[employee.role] || employee.role}
                                     </Badge>
                                   </td>
                                   <td className="p-4">
@@ -473,14 +504,30 @@ export default function EmployeesPage() {
                                         size="sm"
                                         variant="outline"
                                         onClick={() => openEditDialog(employee)}
+                                        title="Edit karyawan"
                                       >
                                         <Edit className="h-3 w-3" />
                                       </Button>
                                       <Button
                                         size="sm"
                                         variant="outline"
+                                        onClick={() => handleToggleStatus(employee)}
+                                        disabled={submitting}
+                                        title={employee.isActive ? "Nonaktifkan karyawan" : "Aktifkan karyawan"}
+                                        className={employee.isActive ? "text-orange-600" : "text-green-600"}
+                                      >
+                                        {employee.isActive ? (
+                                          <ToggleRight className="h-3 w-3" />
+                                        ) : (
+                                          <ToggleLeft className="h-3 w-3" />
+                                        )}
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
                                         onClick={() => openDeleteDialog(employee)}
-                                        disabled={!employee.isActive}
+                                        title="Hapus karyawan permanen"
+                                        className="text-red-600 hover:text-red-700"
                                       >
                                         <Trash2 className="h-3 w-3" />
                                       </Button>
@@ -573,7 +620,6 @@ export default function EmployeesPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="CASHIER">Kasir</SelectItem>
-                    <SelectItem value="MANAGER">Manajer</SelectItem>
                     <SelectItem value="ADMIN">Administrator</SelectItem>
                   </SelectContent>
                 </Select>
@@ -697,7 +743,6 @@ export default function EmployeesPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="CASHIER">Kasir</SelectItem>
-                    <SelectItem value="MANAGER">Manajer</SelectItem>
                     <SelectItem value="ADMIN">Administrator</SelectItem>
                   </SelectContent>
                 </Select>
@@ -781,11 +826,14 @@ export default function EmployeesPage() {
                   <AlertTriangle className="h-5 w-5 text-red-600" />
                 </div>
                 <div>
-                  <AlertDialogTitle>Nonaktifkan Karyawan</AlertDialogTitle>
+                  <AlertDialogTitle>Hapus Karyawan Permanen</AlertDialogTitle>
                   <AlertDialogDescription>
-                    Apakah Anda yakin ingin menonaktifkan karyawan "{selectedEmployee?.firstName} {selectedEmployee?.lastName}"?
-                    <span className="block mt-2 text-gray-600">
-                      Karyawan yang dinonaktifkan tidak akan bisa mengakses sistem.
+                    Apakah Anda yakin ingin menghapus karyawan "{selectedEmployee?.firstName} {selectedEmployee?.lastName}" secara permanen?
+                    <span className="block mt-2 text-red-600 font-medium">
+                      Peringatan: Data karyawan akan dihapus permanen dan tidak dapat dikembalikan!
+                    </span>
+                    <span className="block mt-1 text-gray-600">
+                      Aksi ini hanya bisa dilakukan jika karyawan tidak memiliki riwayat transaksi.
                     </span>
                   </AlertDialogDescription>
                 </div>
@@ -799,7 +847,7 @@ export default function EmployeesPage() {
                 className="bg-red-500 hover:bg-red-600"
               >
                 {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Nonaktifkan
+                Hapus Permanen
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>

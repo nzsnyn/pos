@@ -103,7 +103,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (!role || !['ADMIN', 'MANAGER', 'CASHIER'].includes(role)) {
+    if (!role || !['ADMIN', 'CASHIER'].includes(role)) {
       return NextResponse.json(
         { error: 'Role tidak valid' },
         { status: 400 }
@@ -145,7 +145,7 @@ export async function POST(request: NextRequest) {
         password: hashedPassword,
         firstName: firstName.trim(),
         lastName: lastName.trim(),
-        role: role as 'ADMIN' | 'MANAGER' | 'CASHIER',
+        role: role as 'ADMIN' | 'CASHIER',
       },
       select: {
         id: true,
