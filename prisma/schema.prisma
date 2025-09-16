@@ -35,6 +35,7 @@ model Product {
   categoryId       String
   orderItems       OrderItem[]
   procurementItems ProcurementItem[] // relation to procurement items
+  stockOpnameItems StockOpnameItem[] // relation to stock opname items
   isActive         Boolean           @default(true)
   // Dashboard Analytics Relations
   dailyStats       DailyStats[]
@@ -113,6 +114,8 @@ model User {
   cashierPerformance   CashierPerformance[]
   salesTargets         SalesTarget[]
   procurements         Procurement[]         // relation to procurements
+  createdStockOpnames  StockOpname[]         // Stock opnames created by this user
+  approvedStockOpnames StockOpname[]         @relation("ApprovedStockOpname") // Stock opnames approved by this user
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt
 
@@ -442,4 +445,53 @@ enum AlertPriority {
   MEDIUM
   HIGH
   CRITICAL
+}
+
+model StockOpname {
+  id              String              @id @default(cuid())
+  opnameNumber    String              @unique
+  title           String
+  description     String?
+  status          StockOpnameStatus   @default(DRAFT)
+  items           StockOpnameItem[]
+  totalItems      Int                 @default(0)
+  totalVariance   Float               @default(0)
+  createdBy       User                @relation(fields: [createdById], references: [id])
+  createdById     String
+  approvedBy      User?               @relation("ApprovedStockOpname", fields: [approvedById], references: [id])
+  approvedById    String?
+  approvedAt      DateTime?
+  scheduledDate   DateTime?
+  completedAt     DateTime?
+  notes           String?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  @@map("stock_opnames")
+}
+
+model StockOpnameItem {
+  id              String        @id @default(cuid())
+  stockOpname     StockOpname   @relation(fields: [stockOpnameId], references: [id], onDelete: Cascade)
+  stockOpnameId   String
+  product         Product       @relation(fields: [productId], references: [id])
+  productId       String
+  systemStock     Int           // Stock according to system
+  physicalStock   Int           // Actual physical count
+  variance        Int           // Difference (physical - system)
+  varianceValue   Float         // Variance in currency value
+  notes           String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@unique([stockOpnameId, productId])
+  @@map("stock_opname_items")
+}
+
+enum StockOpnameStatus {
+  DRAFT
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  APPROVED
 }
