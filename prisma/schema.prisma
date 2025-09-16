@@ -462,6 +462,7 @@ model StockOpname {
   approvedBy      User?               @relation("ApprovedStockOpname", fields: [approvedById], references: [id])
   approvedById    String?
   approvedAt      DateTime?
+  startDate       DateTime?           // When the stock opname was started
   scheduledDate   DateTime?
   completedAt     DateTime?
   completedDate   DateTime?
