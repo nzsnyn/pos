@@ -6,6 +6,22 @@ import { prisma } from '@/lib/prisma'
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'
 
 export async function POST(request: NextRequest) {
+  // Verify environment variables
+  if (!process.env.JWT_SECRET) {
+    console.error('JWT_SECRET environment variable is not set')
+    return NextResponse.json(
+      { error: 'Server configuration error' },
+      { status: 500 }
+    )
+  }
+
+  if (!process.env.DATABASE_URL) {
+    console.error('DATABASE_URL environment variable is not set')
+    return NextResponse.json(
+      { error: 'Database connection error' },
+      { status: 500 }
+    )
+  }
   try {
     const body = await request.json()
     const { username, password } = body
